@@ -1,0 +1,117 @@
+:root {
+  --bg-ink: #0f1418;
+  --panel-ink: #141f29;
+  --accent-fire: #ef7f42;
+  --accent-cyan: #4ad7d1;
+  --text-main: #f8f4e8;
+  --text-muted: #aebac7;
+  --line: #2c3d4d;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  min-height: 100%;
+  font-family: "Trebuchet MS", "Segoe UI", sans-serif;
+  color: var(--text-main);
+  background:
+    radial-gradient(circle at 12% 15%, rgba(74, 215, 209, 0.12), transparent 42%),
+    radial-gradient(circle at 88% 12%, rgba(239, 127, 66, 0.12), transparent 45%),
+    linear-gradient(180deg, #0c1114 0%, #151f28 100%);
+}
+
+.app-shell {
+  max-width: 1380px;
+  margin: 0 auto;
+  padding: 1rem;
+}
+
+.top-bar {
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: linear-gradient(180deg, rgba(20, 31, 41, 0.95), rgba(11, 17, 23, 0.95));
+  padding: 0.9rem 1rem;
+  margin-bottom: 0.9rem;
+}
+
+.top-bar h1 {
+  margin: 0;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: #ffe0c4;
+}
+
+.top-bar p {
+  margin: 0.35rem 0 0;
+  color: var(--text-muted);
+}
+
+.game-wrap {
+  position: relative;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  overflow: hidden;
+  box-shadow: 0 20px 55px rgba(0, 0, 0, 0.35);
+}
+
+#gameCanvas {
+  width: 100%;
+  height: auto;
+  display: block;
+  background: #111;
+}
+
+.hud-tip {
+  position: absolute;
+  left: 50%;
+  bottom: 1rem;
+  transform: translateX(-50%);
+  padding: 0.45rem 0.75rem;
+  font-weight: 700;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 999px;
+  background: rgba(10, 14, 18, 0.72);
+  color: #eff7ff;
+  pointer-events: none;
+  letter-spacing: 0.04em;
+}
+
+.controls-panel {
+  margin-top: 0.85rem;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 0.6rem;
+}
+
+.controls-panel > div {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 0.65rem;
+  background: rgba(20, 31, 41, 0.8);
+}
+
+.controls-panel h2 {
+  margin: 0;
+  font-size: 1rem;
+  color: #fcd6a6;
+}
+
+.controls-panel p {
+  margin: 0.38rem 0;
+  color: var(--text-muted);
+  font-size: 0.92rem;
+}
+
+@media (max-width: 880px) {
+  .top-bar p {
+    font-size: 0.92rem;
+  }
+
+  .hud-tip {
+    font-size: 0.85rem;
+  }
+}

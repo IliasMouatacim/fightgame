@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Clashline Arena</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="top-bar">
+        <h1>Clashline Arena</h1>
+        <p>Fast 1v1 prototype with rounds, AI, training, specials, and style-heavy stages</p>
+      </header>
+
+      <main class="game-wrap">
+        <canvas id="gameCanvas" width="1280" height="720"></canvas>
+        <div class="hud-tip" id="hudTip">Press Enter to start</div>
+      </main>
+
+      <footer class="controls-panel">
+        <div>
+          <h2>Player 1</h2>
+          <p>Move: A D | Jump: W | Block: S</p>
+          <p>Light: F | Heavy: G | Special: H</p>
+        </div>
+        <div>
+          <h2>Player 2</h2>
+          <p>Move: Left Right | Jump: Up | Block: Down</p>
+          <p>Light: J | Heavy: K | Special: L</p>
+        </div>
+        <div>
+          <h2>Global</h2>
+          <p>Enter: Confirm | Esc: Back to menu</p>
+          <p>M: Toggle mute</p>
+        </div>
+      </footer>
+    </div>
+
+    <script src="game.js"></script>
+  </body>
+</html>
