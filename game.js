@@ -99,6 +99,7 @@ const fightersData = [
     jumpVelocity: 18.5,
     dashSpeed: 8.5,
     spritePath: "assets/fighter1.png",
+    lightSpritePath: "assets/hoodie_light.png",
     punchSpritePath: "assets/hoodie_punch.png",
     kickSpritePath: "assets/hoodie_kick.png",
   },
@@ -913,10 +914,11 @@ class Fighter {
 
   getDisplaySpritePath() {
     if (this.data.id !== "hoodie-ace") return this.data.spritePath;
-    if (this.attackType === "light") return this.data.punchSpritePath || this.data.spritePath;
-    if (this.attackType === "heavy" || this.attackType === "special") {
+    if (this.attackType === "light") return this.data.lightSpritePath || this.data.punchSpritePath || this.data.spritePath;
+    if (this.attackType === "heavy") {
       return this.data.kickSpritePath || this.data.spritePath;
     }
+    if (this.attackType === "special") return this.data.punchSpritePath || this.data.spritePath;
     return this.data.spritePath;
   }
 
