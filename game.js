@@ -635,7 +635,14 @@ class Fighter {
 
     const c = this.slot === 1 && mode === "arcade" ? cpuBrain(this, enemy) : this.controlsPressed();
 
-    this.facing = this.x < enemy.x ? 1 : -1;
+    // Face walking direction when moving, otherwise face enemy
+    if (this.attackType) {
+      this.facing = this.x < enemy.x ? 1 : -1;
+    } else if (Math.abs(this.vx) > 1.5) {
+      this.facing = this.vx > 0 ? 1 : -1;
+    } else {
+      this.facing = this.x < enemy.x ? 1 : -1;
+    }
 
     this.blocking = c.block && this.hitstun <= 0 && this.grounded;
     const wasGrounded = this.grounded;
@@ -742,8 +749,8 @@ class Fighter {
       h = 54;
     }
     if (this.attackType === "special") {
-      reach = 92;
-      h = 68;
+      reach = 600;
+      h = 120;
     }
 
     return {
@@ -976,11 +983,9 @@ class Fighter {
 
   getDisplaySpritePath() {
     if (this.data.id !== "hoodie-ace") return this.data.spritePath;
-    if (this.attackType === "light") return this.data.lightSpritePath || this.data.punchSpritePath || this.data.spritePath;
-    if (this.attackType === "heavy") {
-      return this.data.kickSpritePath || this.data.spritePath;
-    }
-    if (this.attackType === "special") return this.data.punchSpritePath || this.data.spritePath;
+    if (this.attackType === "light") return this.data.punchSpritePath || this.data.spritePath;
+    if (this.attackType === "heavy") return this.data.kickSpritePath || this.data.spritePath;
+    if (this.attackType === "special") return this.data.lightSpritePath || this.data.spritePath;
     return this.data.spritePath;
   }
 
@@ -1210,99 +1215,139 @@ class Fighter {
       }
     }
 
-    // ============ SPECIAL ATTACK — energy burst ============
+    // ============ SPECIAL ATTACK — full-screen beam/wave ============
     if (this.attackType === "special") {
-      const burstX = dir * (30 + strikeEase * 55);
-      const burstY = -this.height * 0.55;
+      const beamY = -this.height * 0.55;
+      const mapEdge = dir > 0 ? (W - this.x + 50) : (this.x + 50);
 
       if (isWindup) {
-        // Charging vortex — particles spiral inward
-        const numParticles = 12;
-        ctx.globalAlpha = 0.5 + windupEase * 0.3;
+        // Charging energy at hands — particles converge
+        const numParticles = 14;
+        ctx.globalAlpha = 0.5 + windupEase * 0.4;
         for (let i = 0; i < numParticles; i++) {
-          const angle = (t / 200 + i * Math.PI * 2 / numParticles);
-          const radius = 45 * (1 - windupEase * 0.6) + Math.sin(t / 100 + i) * 4;
-          const px = dir * 10 + Math.cos(angle) * radius;
-          const py = burstY + Math.sin(angle) * radius * 0.6;
-          const size = 2 + windupEase * 2;
-          ctx.fillStyle = i % 2 === 0 ? "rgba(130, 255, 248, 0.8)" : `rgba(${this._hexToRgb(this.data.primary)}, 0.7)`;
+          const angle = (t / 150 + i * Math.PI * 2 / numParticles);
+          const radius = 50 * (1 - windupEase * 0.7) + Math.sin(t / 80 + i) * 5;
+          const px = dir * 15 + Math.cos(angle) * radius;
+          const py = beamY + Math.sin(angle) * radius * 0.5;
+          const size = 2 + windupEase * 3;
+          ctx.fillStyle = i % 3 === 0 ? "rgba(130, 255, 248, 0.9)" : i % 3 === 1 ? `rgba(${this._hexToRgb(this.data.primary)}, 0.7)` : "rgba(255, 255, 255, 0.6)";
           ctx.beginPath();
           ctx.arc(px, py, size, 0, Math.PI * 2);
           ctx.fill();
         }
         ctx.globalAlpha = 1;
 
-        // Central charge glow
-        const cGrad = ctx.createRadialGradient(dir * 10, burstY, 2, dir * 10, burstY, 22 + windupEase * 10);
-        cGrad.addColorStop(0, `rgba(130, 255, 248, ${0.35 * windupEase})`);
+        // Growing core glow
+        const coreR = 12 + windupEase * 18;
+        ctx.shadowColor = "#82fff8";
+        ctx.shadowBlur = 20 * windupEase;
+        const cGrad = ctx.createRadialGradient(dir * 15, beamY, 2, dir * 15, beamY, coreR);
+        cGrad.addColorStop(0, `rgba(200, 255, 252, ${0.6 * windupEase})`);
+        cGrad.addColorStop(0.5, `rgba(130, 255, 248, ${0.3 * windupEase})`);
         cGrad.addColorStop(1, "rgba(130, 255, 248, 0)");
         ctx.fillStyle = cGrad;
         ctx.beginPath();
-        ctx.arc(dir * 10, burstY, 22 + windupEase * 10, 0, Math.PI * 2);
+        ctx.arc(dir * 15, beamY, coreR, 0, Math.PI * 2);
         ctx.fill();
+        ctx.shadowBlur = 0;
       }
 
       if (isStrike) {
-        // Energy ring expansion
+        // ---- MAIN BEAM stretching to map edge ----
+        const beamLen = mapEdge * strikeEase;
+        const beamW = 28 + Math.sin(t / 30) * 4;
+        const beamCoreW = 14 + Math.sin(t / 25) * 2;
+
+        // Outer beam glow
         ctx.shadowColor = "#82fff8";
-        ctx.shadowBlur = 25;
-        const ringR = 30 + strikeEase * 60;
-        ctx.strokeStyle = "rgba(130, 255, 248, 0.85)";
-        ctx.lineWidth = 5 + (1 - strikeEase) * 6;
+        ctx.shadowBlur = 30;
+        const beamGrad = ctx.createLinearGradient(0, beamY, dir * beamLen, beamY);
+        beamGrad.addColorStop(0, "rgba(130, 255, 248, 0.85)");
+        beamGrad.addColorStop(0.3, "rgba(100, 230, 225, 0.7)");
+        beamGrad.addColorStop(0.7, `rgba(${this._hexToRgb(this.data.primary)}, 0.5)`);
+        beamGrad.addColorStop(1, "rgba(130, 255, 248, 0.1)");
+        ctx.fillStyle = beamGrad;
         ctx.beginPath();
-        ctx.arc(burstX * 0.6, burstY, ringR, 0, Math.PI * 2);
-        ctx.stroke();
+        ctx.moveTo(dir * 20, beamY - beamW);
+        ctx.lineTo(dir * beamLen, beamY - beamW * 0.4);
+        ctx.lineTo(dir * beamLen, beamY + beamW * 0.4);
+        ctx.lineTo(dir * 20, beamY + beamW);
+        ctx.closePath();
+        ctx.fill();
+
+        // Inner bright core
+        ctx.fillStyle = "rgba(220, 255, 252, 0.9)";
+        ctx.beginPath();
+        ctx.moveTo(dir * 20, beamY - beamCoreW);
+        ctx.lineTo(dir * beamLen * 0.85, beamY - beamCoreW * 0.3);
+        ctx.lineTo(dir * beamLen * 0.85, beamY + beamCoreW * 0.3);
+        ctx.lineTo(dir * 20, beamY + beamCoreW);
+        ctx.closePath();
+        ctx.fill();
         ctx.shadowBlur = 0;
 
-        // Secondary ring
-        ctx.strokeStyle = `rgba(${this._hexToRgb(this.data.primary)}, 0.5)`;
-        ctx.lineWidth = 3;
-        ctx.beginPath();
-        ctx.arc(burstX * 0.6, burstY, ringR * 0.7, 0, Math.PI * 2);
-        ctx.stroke();
-
-        // Energy orbs along the strike path
-        ctx.globalAlpha = 0.7;
-        for (let i = 0; i < 6; i++) {
-          const orbT = i / 6;
-          const orbX = dir * (10 + orbT * (burstX - 10));
-          const orbY = burstY + Math.sin(t / 60 + i * 1.3) * 8;
-          const orbR = 3 + Math.sin(t / 40 + i * 2) * 1.5;
-          ctx.fillStyle = i % 2 === 0 ? "rgba(130, 255, 248, 0.9)" : "rgba(200, 255, 252, 0.8)";
+        // Energy particles along the beam
+        ctx.globalAlpha = 0.75;
+        for (let i = 0; i < 12; i++) {
+          const pT = i / 12;
+          const px = dir * (25 + pT * beamLen * 0.9);
+          const py = beamY + Math.sin(t / 40 + i * 2.1) * (beamW * 0.6);
+          const ps = 2 + Math.sin(t / 30 + i * 1.5) * 1.5;
+          ctx.fillStyle = i % 2 === 0 ? "rgba(255, 255, 255, 0.9)" : "rgba(130, 255, 248, 0.8)";
           ctx.beginPath();
-          ctx.arc(orbX, orbY, orbR, 0, Math.PI * 2);
+          ctx.arc(px, py, ps, 0, Math.PI * 2);
           ctx.fill();
         }
         ctx.globalAlpha = 1;
 
-        // Central flash during peak strike
-        if (strikeEase > 0.3 && strikeEase < 0.8) {
-          const flashIntensity = 1 - Math.abs(strikeEase - 0.55) / 0.25;
-          ctx.globalAlpha = flashIntensity * 0.4;
-          const flashGrad = ctx.createRadialGradient(burstX * 0.6, burstY, 5, burstX * 0.6, burstY, 50);
-          flashGrad.addColorStop(0, "rgba(255, 255, 255, 0.8)");
-          flashGrad.addColorStop(0.5, "rgba(130, 255, 248, 0.3)");
-          flashGrad.addColorStop(1, "rgba(130, 255, 248, 0)");
-          ctx.fillStyle = flashGrad;
+        // Impact flash at the tip
+        if (strikeEase > 0.4) {
+          const tipX = dir * beamLen;
+          const flashA = Math.sin((strikeEase - 0.4) * Math.PI / 0.6) * 0.5;
+          ctx.globalAlpha = flashA;
+          const tipGrad = ctx.createRadialGradient(tipX, beamY, 4, tipX, beamY, 35);
+          tipGrad.addColorStop(0, "rgba(255, 255, 255, 0.9)");
+          tipGrad.addColorStop(0.5, "rgba(130, 255, 248, 0.4)");
+          tipGrad.addColorStop(1, "rgba(130, 255, 248, 0)");
+          ctx.fillStyle = tipGrad;
           ctx.beginPath();
-          ctx.arc(burstX * 0.6, burstY, 50, 0, Math.PI * 2);
+          ctx.arc(tipX, beamY, 35, 0, Math.PI * 2);
           ctx.fill();
           ctx.globalAlpha = 1;
         }
+
+        // Source glow at origin
+        const srcGrad = ctx.createRadialGradient(dir * 20, beamY, 3, dir * 20, beamY, 25);
+        srcGrad.addColorStop(0, "rgba(255, 255, 255, 0.8)");
+        srcGrad.addColorStop(0.5, "rgba(130, 255, 248, 0.4)");
+        srcGrad.addColorStop(1, "rgba(130, 255, 248, 0)");
+        ctx.fillStyle = srcGrad;
+        ctx.beginPath();
+        ctx.arc(dir * 20, beamY, 25, 0, Math.PI * 2);
+        ctx.fill();
       }
 
       if (isRecovery) {
-        // Dissipating sparks
+        // Fading beam remnants
         const fadeT = (progress - 0.72) / 0.28;
-        ctx.globalAlpha = (1 - fadeT) * 0.5;
-        for (let i = 0; i < 6; i++) {
-          const angle = t / 150 + i * Math.PI / 3;
-          const r = 25 + fadeT * 40;
-          const sx = burstX * 0.4 + Math.cos(angle) * r;
-          const sy = burstY + Math.sin(angle) * r * 0.7;
-          ctx.fillStyle = "rgba(130, 255, 248, 0.6)";
+        const remnantLen = mapEdge * (1 - fadeT * 0.5);
+        ctx.globalAlpha = (1 - fadeT) * 0.35;
+        ctx.fillStyle = "rgba(130, 255, 248, 0.4)";
+        ctx.beginPath();
+        ctx.moveTo(dir * 20, beamY - 12 * (1 - fadeT));
+        ctx.lineTo(dir * remnantLen * 0.6, beamY - 5 * (1 - fadeT));
+        ctx.lineTo(dir * remnantLen * 0.6, beamY + 5 * (1 - fadeT));
+        ctx.lineTo(dir * 20, beamY + 12 * (1 - fadeT));
+        ctx.closePath();
+        ctx.fill();
+
+        // Dissipating sparks
+        for (let i = 0; i < 8; i++) {
+          const sx = dir * (30 + Math.random() * remnantLen * 0.5);
+          const sy = beamY + (Math.random() - 0.5) * 40;
+          ctx.fillStyle = "rgba(130, 255, 248, 0.5)";
           ctx.beginPath();
-          ctx.arc(sx, sy, 2, 0, Math.PI * 2);
+          ctx.arc(sx, sy, 1.5, 0, Math.PI * 2);
           ctx.fill();
         }
         ctx.globalAlpha = 1;
