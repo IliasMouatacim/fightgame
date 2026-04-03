@@ -7,9 +7,83 @@ const hudTip = document.getElementById("hudTip");
 const W = canvas.width;
 const H = canvas.height;
 const GROUND_Y = H - 120;
+const GAMEPAD_DEADZONE = 0.35;
 
 const input = new Set();
 const keysPressedThisFrame = new Set();
+const gamepadStates = new Map();
+
+function asArray(value) {
+  return Array.isArray(value) ? value : [value];
+}
+
+function isHeld(control) {
+  return asArray(control).some((code) => input.has(code));
+}
+
+function wasPressed(control) {
+  return asArray(control).some((code) => keysPressedThisFrame.has(code));
+}
+
+function setVirtualInput(code, pressed) {
+  const wasPressed = gamepadStates.get(code) || false;
+  if (pressed) {
+    input.add(code);
+    if (!wasPressed) {
+      keysPressedThisFrame.add(code);
+      unlockAudio();
+    }
+  } else {
+    input.delete(code);
+  }
+  gamepadStates.set(code, pressed);
+}
+
+function isButtonPressed(button) {
+  return Boolean(button && button.pressed);
+}
+
+function getAxisValue(pad, index) {
+  return pad && pad.axes && typeof pad.axes[index] === "number" ? pad.axes[index] : 0;
+}
+
+function syncGamepadInput() {
+  const pads = navigator.getGamepads ? navigator.getGamepads() : [];
+
+  for (let slot = 0; slot < 2; slot += 1) {
+    const pad = pads[slot];
+    const prefix = `Pad${slot}`;
+
+    const axisX = getAxisValue(pad, 0);
+    const axisY = getAxisValue(pad, 1);
+
+    const left = Boolean(pad) && (isButtonPressed(pad.buttons[14]) || axisX < -GAMEPAD_DEADZONE);
+    const right = Boolean(pad) && (isButtonPressed(pad.buttons[15]) || axisX > GAMEPAD_DEADZONE);
+    const up = Boolean(pad) && (isButtonPressed(pad.buttons[12]) || axisY < -GAMEPAD_DEADZONE);
+    const down = Boolean(pad) && (isButtonPressed(pad.buttons[13]) || axisY > GAMEPAD_DEADZONE);
+
+    const confirm = Boolean(pad) && (isButtonPressed(pad.buttons[0]) || isButtonPressed(pad.buttons[9]));
+    const back = Boolean(pad) && isButtonPressed(pad.buttons[1]);
+    const light = Boolean(pad) && isButtonPressed(pad.buttons[2]);
+    const heavy = Boolean(pad) && isButtonPressed(pad.buttons[3]);
+    const special = Boolean(pad) && isButtonPressed(pad.buttons[5]);
+    const block = Boolean(pad) && isButtonPressed(pad.buttons[1]);
+
+    setVirtualInput(`${prefix}Left`, left);
+    setVirtualInput(`${prefix}Right`, right);
+    setVirtualInput(`${prefix}Up`, up || confirm);
+    setVirtualInput(`${prefix}Down`, down);
+    setVirtualInput(`${prefix}Confirm`, confirm);
+    setVirtualInput(`${prefix}Back`, back);
+    setVirtualInput(`${prefix}Jump`, confirm);
+    setVirtualInput(`${prefix}Block`, block);
+    setVirtualInput(`${prefix}Light`, light);
+    setVirtualInput(`${prefix}Heavy`, heavy);
+    setVirtualInput(`${prefix}Special`, special);
+    setVirtualInput(`${prefix}MenuUp`, up);
+    setVirtualInput(`${prefix}MenuDown`, down);
+  }
+}
 
 const fightersData = [
   {
@@ -20,6 +94,9 @@ const fightersData = [
     speed: 1.08,
     power: 1.02,
     defense: 0.98,
+    gravity: 0.92,
+    jumpVelocity: 18.5,
+    dashSpeed: 8.5,
     spritePath: "assets/fighter1.png",
   },
   {
@@ -30,7 +107,49 @@ const fightersData = [
     speed: 1.0,
     power: 1.0,
     defense: 1.02,
+    gravity: 0.85,
+    jumpVelocity: 17.5,
+    dashSpeed: 7.5,
     spritePath: "assets/fighter2.png",
+  },
+  {
+    id: "neon-striker",
+    name: "Neon Striker",
+    primary: "#ff007f",
+    secondary: "#4d0026",
+    speed: 1.35,
+    power: 0.85,
+    defense: 0.85,
+    gravity: 0.75,
+    jumpVelocity: 19.5,
+    dashSpeed: 11,
+    spritePath: null,
+  },
+  {
+    id: "titan-rock",
+    name: "Titan Rock",
+    primary: "#5c5c5c",
+    secondary: "#262626",
+    speed: 0.75,
+    power: 1.35,
+    defense: 1.35,
+    gravity: 1.15,
+    jumpVelocity: 16.0,
+    dashSpeed: 5.5,
+    spritePath: null,
+  },
+  {
+    id: "shadow-ninja",
+    name: "Shadow Ninja",
+    primary: "#141414",
+    secondary: "#4a00e0",
+    speed: 1.25,
+    power: 0.95,
+    defense: 0.9,
+    gravity: 0.95,
+    jumpVelocity: 21.0,
+    dashSpeed: 10,
+    spritePath: null,
   },
 ];
 
@@ -59,6 +178,11 @@ const stages = [
     fog: "rgba(255, 154, 94, 0.14)",
     floorA: "#4f2a1e",
     floorB: "#281411",
+    moonColor: "#ff4d4d",
+    moonSize: 90,
+    moonOffsetX: -150,
+    moonOffsetY: 0,
+    mountainColor: "#3d1c16",
   },
   {
     id: "oasis",
@@ -68,6 +192,11 @@ const stages = [
     fog: "rgba(107, 253, 235, 0.11)",
     floorA: "#1a413f",
     floorB: "#0d2325",
+    moonColor: "#e6ffff",
+    moonSize: 120,
+    moonOffsetX: 200,
+    moonOffsetY: -40,
+    mountainColor: "#0f2e30",
   },
   {
     id: "sunset-yards",
@@ -77,6 +206,11 @@ const stages = [
     fog: "rgba(255, 216, 168, 0.11)",
     floorA: "#654436",
     floorB: "#322018",
+    moonColor: "#ffb366",
+    moonSize: 75,
+    moonOffsetX: 0,
+    moonOffsetY: 50,
+    mountainColor: "#4f2a20",
   },
 ];
 
@@ -365,6 +499,7 @@ function keyUp(e) {
 
 window.addEventListener("keydown", keyDown);
 window.addEventListener("keyup", keyUp);
+window.addEventListener("gamepadconnected", unlockAudio);
 
 class Fighter {
   constructor(slot, data, controls) {
@@ -393,6 +528,7 @@ class Fighter {
     this.hitstun = 0;
     this.attackTimer = 0;
     this.attackType = null;
+    this.attackDuration = 0;
     this.attackConnected = false;
 
     this.combo = 0;
@@ -400,6 +536,13 @@ class Fighter {
 
     this.flashTimer = 0;
     this.isKO = false;
+
+    this.scaleX = 1;
+    this.scaleY = 1;
+
+    this.dashTimer = 0;
+    this.dashDir = 0;
+    this.lastTap = { dir: 0, time: 0 };
   }
 
   get moveSpeed() {
@@ -407,18 +550,20 @@ class Fighter {
   }
 
   get jumpPower() {
-    return 18.5 * this.data.speed;
+    return this.data.jumpVelocity;
   }
 
   controlsPressed() {
     return {
-      left: input.has(this.controls.left),
-      right: input.has(this.controls.right),
-      up: input.has(this.controls.up),
-      block: input.has(this.controls.block),
-      light: keysPressedThisFrame.has(this.controls.light),
-      heavy: keysPressedThisFrame.has(this.controls.heavy),
-      special: keysPressedThisFrame.has(this.controls.special),
+      left: isHeld(this.controls.left),
+      right: isHeld(this.controls.right),
+      up: isHeld(this.controls.up),
+      block: isHeld(this.controls.block),
+      leftPressed: wasPressed(this.controls.left),
+      rightPressed: wasPressed(this.controls.right),
+      light: wasPressed(this.controls.light),
+      heavy: wasPressed(this.controls.heavy),
+      special: wasPressed(this.controls.special),
     };
   }
 
@@ -439,22 +584,54 @@ class Fighter {
       this.attackType = null;
       this.attackConnected = false;
     }
+    
+    if (this.dashTimer > 0) this.dashTimer -= 1;
+    this.scaleX += (1 - this.scaleX) * 0.15;
+    this.scaleY += (1 - this.scaleY) * 0.15;
 
     const c = this.slot === 1 && mode === "arcade" ? cpuBrain(this, enemy) : this.controlsPressed();
 
     this.facing = this.x < enemy.x ? 1 : -1;
 
     this.blocking = c.block && this.hitstun <= 0 && this.grounded;
+    const wasGrounded = this.grounded;
 
     if (this.hitstun <= 0) {
-      this.vx = 0;
+      if (!c.left && !c.right) {
+        this.vx *= 0.7; // friction
+      }
 
-      if (c.left) this.vx = -this.moveSpeed;
-      if (c.right) this.vx = this.moveSpeed;
+      if (c.left) {
+        if (c.leftPressed && this.lastTap.dir === -1 && performance.now() - this.lastTap.time < 300) {
+          this.dashTimer = 22;
+          this.dashDir = -1;
+          spawnBurst(this.x, GROUND_Y - 10, "#ffffff", 4);
+        } else if (c.leftPressed) {
+          this.lastTap = { dir: -1, time: performance.now() };
+        }
+        let maxSpeed = this.dashTimer > 0 && this.dashDir === -1 ? this.data.dashSpeed : this.moveSpeed;
+        this.vx -= 1.5;
+        if (this.vx < -maxSpeed) this.vx = -maxSpeed;
+      }
+      
+      if (c.right) {
+        if (c.rightPressed && this.lastTap.dir === 1 && performance.now() - this.lastTap.time < 300) {
+          this.dashTimer = 22;
+          this.dashDir = 1;
+          spawnBurst(this.x, GROUND_Y - 10, "#ffffff", 4);
+        } else if (c.rightPressed) {
+          this.lastTap = { dir: 1, time: performance.now() };
+        }
+        let maxSpeed = this.dashTimer > 0 && this.dashDir === 1 ? this.data.dashSpeed : this.moveSpeed;
+        this.vx += 1.5;
+        if (this.vx > maxSpeed) this.vx = maxSpeed;
+      }
 
       if (c.up && this.grounded) {
         this.vy = -this.jumpPower;
         this.grounded = false;
+        this.scaleX = 0.65;
+        this.scaleY = 1.35;
       }
 
       if (!this.attackType) {
@@ -464,8 +641,8 @@ class Fighter {
       }
     }
 
-    this.vy += 0.92;
-    if (this.vy > 16) this.vy = 16;
+    this.vy += this.data.gravity;
+    if (this.vy > 18) this.vy = 18;
 
     this.x += this.vx;
     this.y += this.vy;
@@ -476,6 +653,11 @@ class Fighter {
       this.y = GROUND_Y;
       this.vy = 0;
       this.grounded = true;
+      if (!wasGrounded) {
+        this.scaleX = 1.4;
+        this.scaleY = 0.6;
+        spawnBurst(this.x, GROUND_Y, "rgba(255,255,255,0.4)", 6);
+      }
     } else {
       this.grounded = false;
     }
@@ -491,6 +673,8 @@ class Fighter {
       this.attackTimer = 30;
       this.meter -= 35;
     }
+
+    this.attackDuration = this.attackTimer;
 
     playSfx(type);
   }
@@ -581,9 +765,27 @@ class Fighter {
   draw() {
     const pulse = this.attackType ? Math.sin(performance.now() / 65) * 0.08 + 1 : 1;
     const sprite = getSprite(this.data.spritePath);
+    const attackProgress = this.attackType && this.attackDuration > 0 ? 1 - this.attackTimer / this.attackDuration : 0;
+    const attackIntent = this.getAttackIntent(attackProgress);
 
     ctx.save();
     ctx.translate(this.x, this.y);
+
+    let walkBob = 0;
+    let walkLean = 0;
+    if (this.grounded && Math.abs(this.vx) > 0.5 && this.hitstun <= 0 && !this.attackType && !this.blocking && !this.dashTimer) {
+      walkBob = Math.abs(Math.sin(performance.now() / 80)) * 8;
+      walkLean = (this.vx * this.facing) * 0.015;
+    }
+    if (this.dashTimer > 0) {
+      walkLean = (this.dashDir * this.facing) * 0.15;
+    }
+    if (this.attackType) {
+      walkLean += attackIntent.bodyLean;
+      ctx.translate(attackIntent.bodyShiftX, attackIntent.bodyShiftY);
+    }
+    ctx.translate(0, -walkBob);
+    ctx.rotate(walkLean);
 
     if (this.flashTimer > 0) {
       ctx.globalAlpha = 0.72;
@@ -592,7 +794,11 @@ class Fighter {
       ctx.globalAlpha = 1;
     }
 
-    ctx.scale(this.facing, 1);
+    if (this.attackType) {
+      this.drawAttackAura(attackIntent);
+    }
+
+    ctx.scale(this.facing * this.scaleX, this.scaleY);
 
     if (sprite && sprite.loaded) {
       ctx.imageSmoothingEnabled = false;
@@ -620,6 +826,10 @@ class Fighter {
       ctx.fillRect(this.width * 0.07, -this.height * 0.7, 10, 10);
     }
 
+    if (this.attackType) {
+      this.drawAttackPose(attackIntent);
+    }
+
     if (this.blocking) {
       ctx.strokeStyle = "#9cc9de";
       ctx.lineWidth = 3;
@@ -640,26 +850,180 @@ class Fighter {
     ctx.ellipse(this.x, this.y + 4, 45, 12, 0, 0, Math.PI * 2);
     ctx.fill();
   }
+
+  getAttackIntent(progress) {
+    const clamped = Math.max(0, Math.min(1, progress));
+
+    if (this.attackType === "light") {
+      return {
+        bodyLean: -0.1 + clamped * 0.18,
+        bodyShiftX: 4 + clamped * 10,
+        bodyShiftY: -2,
+        armReach: 24 + clamped * 22,
+        armRise: -22,
+        slashRadius: 74 + clamped * 18,
+        slashWidth: 8,
+        glowColor: "rgba(255, 248, 188, 0.95)",
+        glowOuter: "rgba(255, 219, 107, 0.22)",
+        trailColor: "rgba(255, 246, 176, 0.85)",
+        burstColor: "rgba(255, 236, 160, 0.9)",
+        sparkCount: 6,
+        handScale: 1,
+      };
+    }
+
+    if (this.attackType === "heavy") {
+      return {
+        bodyLean: 0.14 + clamped * 0.12,
+        bodyShiftX: 2 + clamped * 6,
+        bodyShiftY: 2,
+        armReach: 38 + clamped * 36,
+        armRise: -12,
+        slashRadius: 96 + clamped * 30,
+        slashWidth: 14,
+        glowColor: "rgba(255, 179, 118, 0.95)",
+        glowOuter: "rgba(255, 112, 58, 0.18)",
+        trailColor: "rgba(255, 180, 108, 0.78)",
+        burstColor: "rgba(255, 160, 96, 0.85)",
+        sparkCount: 10,
+        handScale: 1.12,
+      };
+    }
+
+    return {
+      bodyLean: 0.02 + clamped * 0.18,
+      bodyShiftX: 3 + clamped * 8,
+      bodyShiftY: -2,
+      armReach: 46 + clamped * 42,
+      armRise: -18,
+      slashRadius: 112 + clamped * 40,
+      slashWidth: 18,
+      glowColor: "rgba(130, 255, 248, 0.9)",
+      glowOuter: "rgba(74, 215, 209, 0.18)",
+      trailColor: "rgba(120, 255, 244, 0.82)",
+      burstColor: "rgba(120, 255, 244, 0.85)",
+      sparkCount: 12,
+      handScale: 1.16,
+    };
+  }
+
+  drawAttackAura(intent) {
+    const swing = Math.sin(performance.now() / 45);
+    const direction = this.facing;
+    const armX = direction * (this.width * 0.34 + intent.armReach * 0.35);
+    const armY = -this.height * 0.78 + intent.armRise + swing * 3;
+    const trailAlpha = this.attackType === "light" ? 0.7 : this.attackType === "heavy" ? 0.55 : 0.62;
+
+    ctx.save();
+    ctx.globalCompositeOperation = "screen";
+    ctx.shadowColor = intent.glowColor;
+    ctx.shadowBlur = this.attackType === "light" ? 24 : 20;
+
+    const auraGrad = ctx.createRadialGradient(0, -this.height * 0.55, 10, 0, -this.height * 0.55, intent.slashRadius);
+    auraGrad.addColorStop(0, intent.glowOuter);
+    auraGrad.addColorStop(0.55, intent.trailColor);
+    auraGrad.addColorStop(1, "rgba(255,255,255,0)");
+    ctx.fillStyle = auraGrad;
+    ctx.beginPath();
+    ctx.arc(armX * 0.45, -this.height * 0.56, intent.slashRadius, 0, Math.PI * 2);
+    ctx.fill();
+
+    const slashStart = -0.9 + (this.attackType === "special" ? 0.25 : 0.0);
+    const slashEnd = slashStart + 1.0 + this.attackTimer * 0.01;
+    ctx.strokeStyle = intent.trailColor;
+    ctx.lineWidth = intent.slashWidth;
+    ctx.lineCap = "round";
+    ctx.globalAlpha = trailAlpha;
+    ctx.beginPath();
+    ctx.arc(armX * 0.34, -this.height * 0.58, intent.slashRadius, slashStart, slashEnd);
+    ctx.stroke();
+
+    if (this.attackType === "light") {
+      ctx.globalAlpha = 0.95;
+      ctx.fillStyle = intent.glowColor;
+      ctx.beginPath();
+      ctx.ellipse(armX, armY, 18, 26, -0.25, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = "rgba(255, 255, 255, 0.95)";
+      ctx.lineWidth = 4;
+      ctx.beginPath();
+      ctx.moveTo(armX - 10, armY - 8);
+      ctx.lineTo(armX + 16, armY - 2);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(armX - 4, armY + 10);
+      ctx.lineTo(armX + 10, armY + 18);
+      ctx.stroke();
+    }
+
+    ctx.globalAlpha = 0.5;
+    ctx.fillStyle = intent.burstColor;
+    for (let i = 0; i < intent.sparkCount; i += 1) {
+      const sparkAngle = (Math.PI * 2 * i) / intent.sparkCount + swing * 0.3;
+      const sparkRadius = intent.slashRadius * (0.68 + (i % 3) * 0.06);
+      const sx = Math.cos(sparkAngle) * sparkRadius;
+      const sy = Math.sin(sparkAngle) * sparkRadius * 0.55;
+      ctx.beginPath();
+      ctx.arc(sx * 0.25, sy - this.height * 0.58, 4 + (i % 2), 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    ctx.restore();
+  }
+
+  drawAttackPose(intent) {
+    const direction = this.facing;
+    const bodyBaseY = -this.height * 0.36;
+    const torsoLean = direction * (this.attackType === "light" ? 0.12 : this.attackType === "heavy" ? 0.22 : 0.18);
+    const armForward = direction * intent.armReach;
+    const armUp = intent.armRise;
+
+    ctx.save();
+    ctx.translate(0, bodyBaseY);
+    ctx.rotate(torsoLean);
+
+    ctx.fillStyle = intent.glowColor;
+    ctx.globalAlpha = this.attackType === "light" ? 0.85 : 0.6;
+    ctx.beginPath();
+    ctx.ellipse(direction * 6, -18, 16, 12, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.globalAlpha = 1;
+    ctx.strokeStyle = intent.trailColor;
+    ctx.lineCap = "round";
+    ctx.lineWidth = this.attackType === "light" ? 8 : this.attackType === "heavy" ? 10 : 12;
+    ctx.beginPath();
+    ctx.moveTo(direction * 8, -16);
+    ctx.lineTo(direction * (18 + armForward * 0.4), armUp - 32);
+    ctx.stroke();
+
+    ctx.fillStyle = this.attackType === "light" ? "rgba(255, 249, 205, 0.95)" : this.attackType === "heavy" ? "rgba(255, 209, 156, 0.95)" : "rgba(190, 255, 250, 0.95)";
+    ctx.beginPath();
+    ctx.arc(direction * (20 + armForward * 0.5), armUp - 30, 12 * intent.handScale, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.restore();
+  }
 }
 
 const p1Controls = {
-  left: "KeyA",
-  right: "KeyD",
-  up: "KeyW",
-  block: "KeyS",
-  light: "KeyF",
-  heavy: "KeyG",
-  special: "KeyH",
+  left: ["KeyA", "Pad0Left"],
+  right: ["KeyD", "Pad0Right"],
+  up: ["KeyW", "Pad0Jump"],
+  block: ["KeyS", "Pad0Block"],
+  light: ["KeyF", "Pad0Light"],
+  heavy: ["KeyG", "Pad0Heavy"],
+  special: ["KeyH", "Pad0Special"],
 };
 
 const p2Controls = {
-  left: "ArrowLeft",
-  right: "ArrowRight",
-  up: "ArrowUp",
-  block: "ArrowDown",
-  light: "KeyJ",
-  heavy: "KeyK",
-  special: "KeyL",
+  left: ["ArrowLeft", "Pad1Left"],
+  right: ["ArrowRight", "Pad1Right"],
+  up: ["ArrowUp", "Pad1Jump"],
+  block: ["ArrowDown", "Pad1Block"],
+  light: ["KeyJ", "Pad1Light"],
+  heavy: ["KeyK", "Pad1Heavy"],
+  special: ["KeyL", "Pad1Special"],
 };
 
 let p1 = new Fighter(0, fightersData[0], p1Controls);
@@ -859,6 +1223,29 @@ function drawTexturedStage() {
   ctx.fillStyle = sky;
   ctx.fillRect(0, 0, W, H);
 
+  if (stage.moonColor) {
+    ctx.beginPath();
+    const midX = W / 2 + Math.sin(performance.now() / 5000) * 15;
+    ctx.arc(midX + stage.moonOffsetX, 180 + stage.moonOffsetY, stage.moonSize, 0, Math.PI * 2);
+    ctx.fillStyle = stage.moonColor;
+    ctx.shadowBlur = 60;
+    ctx.shadowColor = stage.moonColor;
+    ctx.fill();
+    ctx.shadowBlur = 0;
+  }
+
+  if (stage.mountainColor) {
+    ctx.fillStyle = stage.mountainColor;
+    ctx.beginPath();
+    ctx.moveTo(0, GROUND_Y);
+    for (let i = 0; i <= W; i += 120) {
+      const h = 80 + Math.sin(i * 1.3) * 45 + Math.cos(i * 0.8) * 35;
+      ctx.lineTo(i, GROUND_Y - h - 10);
+    }
+    ctx.lineTo(W, GROUND_Y);
+    ctx.fill();
+  }
+
   ctx.fillStyle = stage.fog;
   for (let i = 0; i < 5; i += 1) {
     const y = 120 + i * 90 + Math.sin(performance.now() / 800 + i) * 12;
@@ -980,14 +1367,19 @@ function drawRoundDots(idx, playerNum, x, y) {
 
 function spawnBurst(x, y, color, count) {
   for (let i = 0; i < count; i += 1) {
+    const angle = Math.random() * Math.PI * 2;
+    const speed = Math.random() * 8 + 2;
+    const life = 25 + Math.random() * 20;
     state.particles.push({
       x,
       y,
-      vx: (Math.random() - 0.5) * 7,
-      vy: -Math.random() * 6,
-      life: 22 + Math.random() * 18,
+      vx: Math.cos(angle) * speed,
+      vy: Math.sin(angle) * speed - 2,
+      life: life,
+      maxLife: life,
       color,
-      size: 2 + Math.random() * 4,
+      size: 3 + Math.random() * 5,
+      type: Math.random() > 0.6 ? 'spark' : 'block'
     });
   }
 }
@@ -1003,11 +1395,22 @@ function updateAndDrawParticles() {
 
     p.x += p.vx;
     p.y += p.vy;
-    p.vy += 0.22;
+    p.vy += 0.25;
+    p.vx *= 0.95;
 
-    ctx.globalAlpha = Math.max(0, p.life / 40);
+    ctx.globalAlpha = Math.max(0, p.life / p.maxLife);
     ctx.fillStyle = p.color;
-    ctx.fillRect(p.x, p.y, p.size, p.size);
+    if (p.type === 'spark') {
+      const length = Math.max(p.size, Math.sqrt(p.vx * p.vx + p.vy * p.vy) * 2.5);
+      const angle = Math.atan2(p.vy, p.vx);
+      ctx.save();
+      ctx.translate(p.x, p.y);
+      ctx.rotate(angle);
+      ctx.fillRect(-length / 2, -p.size / 2, length, p.size);
+      ctx.restore();
+    } else {
+      ctx.fillRect(p.x, p.y, p.size, p.size);
+    }
     ctx.globalAlpha = 1;
   }
 }
@@ -1172,18 +1575,18 @@ function setModeByIndex(i) {
 }
 
 function handleSceneInput() {
-  if (keysPressedThisFrame.has("KeyM")) {
+  if (wasPressed("KeyM")) {
     const next = !state.musicMuted;
     setMuted(next);
     if (!next) playSfx("ui-confirm");
   }
 
-  if (keysPressedThisFrame.has("Escape")) {
+  if (wasPressed("Escape", "Pad0Back", "Pad1Back")) {
     state.scene = "title";
     playSfx("ui-back");
   }
 
-  if (state.scene === "title" && keysPressedThisFrame.has("Enter")) {
+  if (state.scene === "title" && wasPressed("Enter", "Pad0Confirm", "Pad1Confirm")) {
     state.scene = "mode";
     playSfx("ui-confirm");
     return;
@@ -1191,14 +1594,14 @@ function handleSceneInput() {
 
   if (state.scene === "mode") {
     let idx = modeIndex();
-    const up = keysPressedThisFrame.has("KeyW") || keysPressedThisFrame.has("ArrowUp");
-    const down = keysPressedThisFrame.has("KeyS") || keysPressedThisFrame.has("ArrowDown");
+    const up = wasPressed("KeyW", "ArrowUp", "Pad0MenuUp", "Pad1MenuUp");
+    const down = wasPressed("KeyS", "ArrowDown", "Pad0MenuDown", "Pad1MenuDown");
     if (up) idx = (idx + 2) % 3;
     if (down) idx = (idx + 1) % 3;
     if (up || down) playSfx("ui-nav");
     setModeByIndex(idx);
 
-    if (keysPressedThisFrame.has("Enter")) {
+    if (wasPressed("Enter", "Pad0Confirm", "Pad1Confirm")) {
       playSfx("ui-confirm");
       if (state.mode === "arcade") {
         state.arcadeStage = 1;
@@ -1212,14 +1615,14 @@ function handleSceneInput() {
   }
 
   if (state.scene === "char-select") {
-    const p1Left = keysPressedThisFrame.has("KeyA");
-    const p1Right = keysPressedThisFrame.has("KeyD");
+    const p1Left = wasPressed("KeyA", "Pad0Left");
+    const p1Right = wasPressed("KeyD", "Pad0Right");
     if (p1Left) state.p1Choice = (state.p1Choice + fightersData.length - 1) % fightersData.length;
     if (p1Right) state.p1Choice = (state.p1Choice + 1) % fightersData.length;
 
     if (state.mode !== "arcade") {
-      const p2Left = keysPressedThisFrame.has("ArrowLeft");
-      const p2Right = keysPressedThisFrame.has("ArrowRight");
+      const p2Left = wasPressed("ArrowLeft", "Pad1Left");
+      const p2Right = wasPressed("ArrowRight", "Pad1Right");
       if (p2Left) state.p2Choice = (state.p2Choice + fightersData.length - 1) % fightersData.length;
       if (p2Right) state.p2Choice = (state.p2Choice + 1) % fightersData.length;
       if (p2Left || p2Right) playSfx("ui-nav");
@@ -1229,7 +1632,7 @@ function handleSceneInput() {
 
     if (p1Left || p1Right) playSfx("ui-nav");
 
-    if (keysPressedThisFrame.has("Enter")) {
+    if (wasPressed("Enter", "Pad0Confirm", "Pad1Confirm")) {
       state.scene = "stage-select";
       playSfx("ui-confirm");
     }
@@ -1238,16 +1641,16 @@ function handleSceneInput() {
 
   if (state.scene === "stage-select") {
     let moved = false;
-    if (keysPressedThisFrame.has("KeyW") || keysPressedThisFrame.has("ArrowUp")) {
+    if (wasPressed("KeyW", "ArrowUp", "Pad0MenuUp", "Pad1MenuUp")) {
       state.stageChoice = (state.stageChoice + stages.length - 1) % stages.length;
       moved = true;
     }
-    if (keysPressedThisFrame.has("KeyS") || keysPressedThisFrame.has("ArrowDown")) {
+    if (wasPressed("KeyS", "ArrowDown", "Pad0MenuDown", "Pad1MenuDown")) {
       state.stageChoice = (state.stageChoice + 1) % stages.length;
       moved = true;
     }
     if (moved) playSfx("ui-nav");
-    if (keysPressedThisFrame.has("Enter")) {
+    if (wasPressed("Enter", "Pad0Confirm", "Pad1Confirm")) {
       playSfx("ui-confirm");
       if (state.mode === "arcade") {
         state.arcadeStage = 1;
@@ -1259,17 +1662,17 @@ function handleSceneInput() {
     return;
   }
 
-  if (state.scene === "results" && keysPressedThisFrame.has("Enter")) {
+  if (state.scene === "results" && wasPressed("Enter", "Pad0Confirm", "Pad1Confirm")) {
     state.scene = "title";
     playSfx("ui-confirm");
   }
 
-  if (state.scene === "arcade-next" && keysPressedThisFrame.has("Enter")) {
+  if (state.scene === "arcade-next" && wasPressed("Enter", "Pad0Confirm", "Pad1Confirm")) {
     playSfx("ui-confirm");
     startMatch(true);
   }
 
-  if (state.scene === "match" && state.mode === "training" && keysPressedThisFrame.has("Enter")) {
+  if (state.scene === "match" && state.mode === "training" && wasPressed("Enter", "Pad0Confirm", "Pad1Confirm")) {
     playSfx("ui-confirm");
     resetRound();
   }
@@ -1305,6 +1708,7 @@ function setTipText() {
 }
 
 function frame() {
+  syncGamepadInput();
   handleSceneInput();
   scheduleMusic();
 
