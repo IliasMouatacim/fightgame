@@ -872,19 +872,86 @@ class Fighter {
       );
       ctx.imageSmoothingEnabled = true;
     } else {
-      const bodyTop = this.y - this.height;
-      const grad = ctx.createLinearGradient(0, bodyTop, 0, this.y);
-      grad.addColorStop(0, this.data.primary);
-      grad.addColorStop(1, this.data.secondary);
+      // Procedural character rendering
+      const breathe = Math.sin(performance.now() / 600) * 2;
+      const isBulky = this.data.id === "titan-rock";
+      const isSlim = this.data.id === "shadow-ninja" || this.data.id === "neon-striker";
+      const bodyW = isBulky ? this.width * 0.62 : isSlim ? this.width * 0.38 : this.width * 0.48;
+      const headR = isBulky ? 22 : isSlim ? 18 : 20;
+      const legW = isBulky ? 14 : isSlim ? 8 : 10;
 
-      ctx.fillStyle = grad;
-      ctx.fillRect(-this.width * 0.5 * pulse, -this.height, this.width * pulse, this.height);
+      // Torso
+      const torsoTop = -this.height * 0.72 + breathe * 0.5;
+      const torsoBot = -this.height * 0.32;
+      const torsoGrad = ctx.createLinearGradient(0, torsoTop, 0, torsoBot);
+      torsoGrad.addColorStop(0, this.data.primary);
+      torsoGrad.addColorStop(1, this.data.secondary);
+      ctx.fillStyle = torsoGrad;
+      ctx.beginPath();
+      ctx.moveTo(-bodyW * 0.5, torsoBot);
+      ctx.lineTo(-bodyW * 0.55, torsoTop + 8);
+      ctx.quadraticCurveTo(-bodyW * 0.4, torsoTop - 4, 0, torsoTop - 2 + breathe);
+      ctx.quadraticCurveTo(bodyW * 0.4, torsoTop - 4, bodyW * 0.55, torsoTop + 8);
+      ctx.lineTo(bodyW * 0.5, torsoBot);
+      ctx.closePath();
+      ctx.fill();
 
-      ctx.fillStyle = "rgba(0, 0, 0, 0.25)";
-      ctx.fillRect(-this.width * 0.32, -this.height * 0.82, this.width * 0.64, this.height * 0.22);
+      // Legs
+      ctx.fillStyle = this.data.secondary;
+      const legSpread = bodyW * 0.28;
+      for (const side of [-1, 1]) {
+        ctx.fillRect(side * legSpread - legW * 0.5, torsoBot, legW, -torsoBot);
+      }
 
+      // Head
+      const headY = torsoTop - headR * 0.6 + breathe;
+      const headGrad = ctx.createRadialGradient(0, headY, 2, 0, headY, headR);
+      headGrad.addColorStop(0, this.data.primary);
+      headGrad.addColorStop(1, this.data.secondary);
+      ctx.fillStyle = headGrad;
+      ctx.beginPath();
+      ctx.arc(0, headY, headR, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Eyes
+      const eyeOffX = 5;
+      const eyeY = headY - 2;
       ctx.fillStyle = "#f6f1dc";
-      ctx.fillRect(this.width * 0.07, -this.height * 0.7, 10, 10);
+      ctx.beginPath();
+      ctx.ellipse(-eyeOffX + 2, eyeY, 4.5, 3.5, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.ellipse(eyeOffX + 2, eyeY, 4.5, 3.5, 0, 0, Math.PI * 2);
+      ctx.fill();
+      // Pupils
+      ctx.fillStyle = "#1a1a2e";
+      ctx.beginPath();
+      ctx.arc(-eyeOffX + 3, eyeY, 2, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(eyeOffX + 3, eyeY, 2, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Arms
+      ctx.strokeStyle = this.data.primary;
+      ctx.lineWidth = isBulky ? 10 : isSlim ? 5 : 7;
+      ctx.lineCap = "round";
+      const armSway = Math.sin(performance.now() / 500) * 3;
+      for (const side of [-1, 1]) {
+        ctx.beginPath();
+        ctx.moveTo(side * bodyW * 0.5, torsoTop + 14);
+        ctx.lineTo(side * (bodyW * 0.5 + 12), torsoBot - 8 + armSway * side);
+        ctx.stroke();
+      }
+
+      // Glow outline
+      ctx.strokeStyle = this.data.primary;
+      ctx.lineWidth = 1.5;
+      ctx.globalAlpha = 0.3 + Math.sin(performance.now() / 400) * 0.1;
+      ctx.beginPath();
+      ctx.arc(0, headY, headR + 4, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.globalAlpha = 1;
     }
 
     if (this.attackType) {
@@ -897,12 +964,7 @@ class Fighter {
       ctx.strokeRect(-this.width * 0.58, -this.height * 0.96, this.width * 1.16, this.height * 0.96);
     }
 
-    if (this.attackType && this.attackBox()) {
-      const box = this.attackBox();
-      ctx.fillStyle = this.attackType === "special" ? "rgba(239, 127, 66, 0.3)" : "rgba(255, 255, 255, 0.2)";
-      const localX = (box.x - this.x) * this.facing;
-      ctx.fillRect(localX - box.w * 0.5, box.y - this.y - box.h * 0.5, box.w, box.h);
-    }
+
 
     ctx.restore();
 
@@ -988,130 +1050,359 @@ class Fighter {
   }
 
   drawAttackAura(intent) {
-    const swing = Math.sin(performance.now() / 45);
-    const direction = this.facing;
-    const armX = direction * (this.width * 0.34 + intent.armReach * 0.35);
-    const armY = -this.height * 0.78 + intent.armRise + swing * 3;
-    const trailAlpha = this.attackType === "light" ? 0.7 : this.attackType === "heavy" ? 0.55 : 0.62;
+    const t = performance.now();
+    const dir = this.facing;
+    const progress = this.attackDuration > 0 ? 1 - this.attackTimer / this.attackDuration : 0;
+    const phase = this.getAttackPhase(progress);
+    const isWindup = phase === "windup";
+    const isStrike = phase === "strike";
+    const isRecovery = phase === "recovery";
+
+    // Easing for smooth motion
+    const strikeEase = isStrike ? Math.sin((progress - 0.28) / 0.44 * Math.PI * 0.5) : 0;
+    const windupEase = isWindup ? progress / 0.28 : 0;
 
     ctx.save();
     ctx.globalCompositeOperation = "screen";
-    ctx.shadowColor = intent.glowColor;
-    ctx.shadowBlur = this.attackType === "light" ? 24 : 20;
 
-    const auraGrad = ctx.createRadialGradient(0, -this.height * 0.55, 10, 0, -this.height * 0.55, intent.slashRadius);
-    auraGrad.addColorStop(0, intent.glowOuter);
-    auraGrad.addColorStop(0.55, intent.trailColor);
-    auraGrad.addColorStop(1, "rgba(255,255,255,0)");
-    ctx.fillStyle = auraGrad;
-    ctx.beginPath();
-    ctx.arc(armX * 0.45, -this.height * 0.56, intent.slashRadius, 0, Math.PI * 2);
-    ctx.fill();
-
-    const slashStart = -0.9 + (this.attackType === "special" ? 0.25 : 0.0);
-    const slashEnd = slashStart + 1.0 + this.attackTimer * 0.01;
-    ctx.strokeStyle = intent.trailColor;
-    ctx.lineWidth = intent.slashWidth;
-    ctx.lineCap = "round";
-    ctx.globalAlpha = trailAlpha;
-    ctx.beginPath();
-    ctx.arc(armX * 0.34, -this.height * 0.58, intent.slashRadius, slashStart, slashEnd);
-    ctx.stroke();
-
-    ctx.globalAlpha = this.attackType === "light" ? 0.34 : 0.24;
-    ctx.strokeStyle = "rgba(255,255,255,0.9)";
-    ctx.lineWidth = this.attackType === "light" ? 2 : 3;
-    ctx.beginPath();
-    ctx.moveTo(direction * 8, -this.height * 0.58);
-    ctx.lineTo(armX * 0.45, armY);
-    ctx.stroke();
-
+    // ============ LIGHT ATTACK — fast directional slash ============
     if (this.attackType === "light") {
-      ctx.globalAlpha = 0.95;
-      ctx.fillStyle = intent.glowColor;
-      ctx.beginPath();
-      ctx.ellipse(armX, armY, 18, 26, -0.25, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.strokeStyle = "rgba(255, 255, 255, 0.95)";
-      ctx.lineWidth = 4;
-      ctx.beginPath();
-      ctx.moveTo(armX - 10, armY - 8);
-      ctx.lineTo(armX + 16, armY - 2);
-      ctx.stroke();
-      ctx.beginPath();
-      ctx.moveTo(armX - 4, armY + 10);
-      ctx.lineTo(armX + 10, armY + 18);
-      ctx.stroke();
+      const slashCenterX = dir * (40 + strikeEase * 45);
+      const slashCenterY = -this.height * 0.58;
+
+      if (isStrike) {
+        // Primary slash arc — thin, fast, crisp
+        ctx.strokeStyle = "rgba(255, 248, 188, 0.95)";
+        ctx.lineWidth = 4 + strikeEase * 3;
+        ctx.lineCap = "round";
+        ctx.shadowColor = "#fff8bc";
+        ctx.shadowBlur = 12;
+        const arcStart = -1.2 - strikeEase * 0.6;
+        const arcEnd = arcStart + 1.4 + strikeEase * 0.8;
+        ctx.beginPath();
+        ctx.arc(slashCenterX, slashCenterY, 38 + strikeEase * 22, arcStart, arcEnd);
+        ctx.stroke();
+        ctx.shadowBlur = 0;
+
+        // Inner bright core
+        ctx.strokeStyle = "rgba(255, 255, 255, 0.9)";
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(slashCenterX, slashCenterY, 36 + strikeEase * 18, arcStart + 0.2, arcEnd - 0.2);
+        ctx.stroke();
+
+        // Speed lines — 4 sharp lines radiating forward
+        ctx.globalAlpha = 0.6 * (1 - strikeEase * 0.5);
+        ctx.strokeStyle = "rgba(255, 248, 200, 0.8)";
+        ctx.lineWidth = 1.5;
+        for (let i = 0; i < 5; i++) {
+          const angle = -0.4 + i * 0.2 + Math.sin(t / 30 + i) * 0.05;
+          const innerR = 20 + i * 4;
+          const outerR = innerR + 18 + strikeEase * 14;
+          ctx.beginPath();
+          ctx.moveTo(slashCenterX + Math.cos(angle) * innerR * dir, slashCenterY + Math.sin(angle) * innerR);
+          ctx.lineTo(slashCenterX + Math.cos(angle) * outerR * dir, slashCenterY + Math.sin(angle) * outerR);
+          ctx.stroke();
+        }
+        ctx.globalAlpha = 1;
+
+        // Impact point flash
+        const tipX = slashCenterX + dir * (38 + strikeEase * 22);
+        const tipY = slashCenterY;
+        ctx.fillStyle = "rgba(255, 255, 240, 0.85)";
+        const flashR = 6 + strikeEase * 4;
+        ctx.beginPath();
+        ctx.arc(tipX, tipY, flashR, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      if (isWindup) {
+        // Subtle windup glow
+        const glowGrad = ctx.createRadialGradient(dir * 20, slashCenterY, 4, dir * 20, slashCenterY, 28);
+        glowGrad.addColorStop(0, "rgba(255, 248, 188, 0.3)");
+        glowGrad.addColorStop(1, "rgba(255, 248, 188, 0)");
+        ctx.fillStyle = glowGrad;
+        ctx.beginPath();
+        ctx.arc(dir * 20, slashCenterY, 28, 0, Math.PI * 2);
+        ctx.fill();
+      }
     }
 
+    // ============ HEAVY ATTACK — wide sweeping arc ============
     if (this.attackType === "heavy") {
-      ctx.globalAlpha = 0.22;
-      ctx.fillStyle = "rgba(255, 190, 130, 0.35)";
-      ctx.beginPath();
-      ctx.moveTo(direction * 12, -this.height * 0.72);
-      ctx.lineTo(direction * 58, -this.height * 0.5);
-      ctx.lineTo(direction * 44, -this.height * 0.34);
-      ctx.closePath();
-      ctx.fill();
+      const sweepCenter = dir * (35 + strikeEase * 50);
+      const sweepY = -this.height * 0.5;
+
+      if (isWindup) {
+        // Charging glow that builds
+        const chargeR = 20 + windupEase * 25;
+        const chargeGrad = ctx.createRadialGradient(dir * -10, sweepY, 4, dir * -10, sweepY, chargeR);
+        chargeGrad.addColorStop(0, `rgba(255, 179, 118, ${0.4 * windupEase})`);
+        chargeGrad.addColorStop(0.6, `rgba(255, 140, 80, ${0.15 * windupEase})`);
+        chargeGrad.addColorStop(1, "rgba(255, 140, 80, 0)");
+        ctx.fillStyle = chargeGrad;
+        ctx.beginPath();
+        ctx.arc(dir * -10, sweepY, chargeR, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      if (isStrike) {
+        // Wide sweep trail — thick glowing arc
+        ctx.shadowColor = "#ffb376";
+        ctx.shadowBlur = 20;
+        ctx.strokeStyle = "rgba(255, 182, 112, 0.9)";
+        ctx.lineWidth = 10 + strikeEase * 6;
+        ctx.lineCap = "round";
+        const sweepStart = -1.6 - strikeEase * 0.4;
+        const sweepEnd = sweepStart + 2.0 + strikeEase * 1.2;
+        ctx.beginPath();
+        ctx.arc(sweepCenter * 0.7, sweepY, 55 + strikeEase * 35, sweepStart, sweepEnd);
+        ctx.stroke();
+        ctx.shadowBlur = 0;
+
+        // Hot inner core
+        ctx.strokeStyle = "rgba(255, 240, 200, 0.8)";
+        ctx.lineWidth = 4;
+        ctx.beginPath();
+        ctx.arc(sweepCenter * 0.7, sweepY, 52 + strikeEase * 30, sweepStart + 0.3, sweepEnd - 0.3);
+        ctx.stroke();
+
+        // Scattered hot sparks
+        ctx.globalAlpha = 0.7;
+        for (let i = 0; i < 8; i++) {
+          const sa = sweepStart + (sweepEnd - sweepStart) * (i / 8) + Math.sin(t / 25 + i * 1.7) * 0.1;
+          const sr = 50 + strikeEase * 30 + Math.sin(t / 35 + i * 2.1) * 8;
+          const sx = sweepCenter * 0.7 + Math.cos(sa) * sr;
+          const sy = sweepY + Math.sin(sa) * sr;
+          const sparkSize = 2 + (i % 3);
+          ctx.fillStyle = i % 2 === 0 ? "rgba(255, 200, 140, 0.9)" : "rgba(255, 255, 220, 0.8)";
+          ctx.beginPath();
+          ctx.arc(sx, sy, sparkSize, 0, Math.PI * 2);
+          ctx.fill();
+        }
+        ctx.globalAlpha = 1;
+
+        // Ground shockwave if grounded
+        if (this.grounded && strikeEase > 0.5) {
+          const waveWidth = (strikeEase - 0.5) * 2;
+          ctx.globalAlpha = 0.35 * (1 - (strikeEase - 0.5) * 2);
+          ctx.strokeStyle = "rgba(255, 200, 140, 0.7)";
+          ctx.lineWidth = 3;
+          ctx.beginPath();
+          ctx.ellipse(sweepCenter * 0.5, 0, 40 + waveWidth * 80, 8 + waveWidth * 4, 0, 0, Math.PI * 2);
+          ctx.stroke();
+          ctx.globalAlpha = 1;
+        }
+      }
+
+      if (isRecovery) {
+        // Fading afterglow
+        const fadeAlpha = 1 - (progress - 0.72) / 0.28;
+        ctx.globalAlpha = fadeAlpha * 0.25;
+        const afterGrad = ctx.createRadialGradient(sweepCenter * 0.5, sweepY, 8, sweepCenter * 0.5, sweepY, 60);
+        afterGrad.addColorStop(0, "rgba(255, 182, 112, 0.4)");
+        afterGrad.addColorStop(1, "rgba(255, 140, 80, 0)");
+        ctx.fillStyle = afterGrad;
+        ctx.beginPath();
+        ctx.arc(sweepCenter * 0.5, sweepY, 60, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.globalAlpha = 1;
+      }
     }
 
-    ctx.globalAlpha = 0.5;
-    ctx.fillStyle = intent.burstColor;
-    for (let i = 0; i < intent.sparkCount; i += 1) {
-      const sparkAngle = (Math.PI * 2 * i) / intent.sparkCount + swing * 0.3;
-      const sparkRadius = intent.slashRadius * (0.68 + (i % 3) * 0.06);
-      const sx = Math.cos(sparkAngle) * sparkRadius;
-      const sy = Math.sin(sparkAngle) * sparkRadius * 0.55;
-      ctx.beginPath();
-      ctx.arc(sx * 0.25, sy - this.height * 0.58, 4 + (i % 2), 0, Math.PI * 2);
-      ctx.fill();
+    // ============ SPECIAL ATTACK — energy burst ============
+    if (this.attackType === "special") {
+      const burstX = dir * (30 + strikeEase * 55);
+      const burstY = -this.height * 0.55;
+
+      if (isWindup) {
+        // Charging vortex — particles spiral inward
+        const numParticles = 12;
+        ctx.globalAlpha = 0.5 + windupEase * 0.3;
+        for (let i = 0; i < numParticles; i++) {
+          const angle = (t / 200 + i * Math.PI * 2 / numParticles);
+          const radius = 45 * (1 - windupEase * 0.6) + Math.sin(t / 100 + i) * 4;
+          const px = dir * 10 + Math.cos(angle) * radius;
+          const py = burstY + Math.sin(angle) * radius * 0.6;
+          const size = 2 + windupEase * 2;
+          ctx.fillStyle = i % 2 === 0 ? "rgba(130, 255, 248, 0.8)" : `rgba(${this._hexToRgb(this.data.primary)}, 0.7)`;
+          ctx.beginPath();
+          ctx.arc(px, py, size, 0, Math.PI * 2);
+          ctx.fill();
+        }
+        ctx.globalAlpha = 1;
+
+        // Central charge glow
+        const cGrad = ctx.createRadialGradient(dir * 10, burstY, 2, dir * 10, burstY, 22 + windupEase * 10);
+        cGrad.addColorStop(0, `rgba(130, 255, 248, ${0.35 * windupEase})`);
+        cGrad.addColorStop(1, "rgba(130, 255, 248, 0)");
+        ctx.fillStyle = cGrad;
+        ctx.beginPath();
+        ctx.arc(dir * 10, burstY, 22 + windupEase * 10, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      if (isStrike) {
+        // Energy ring expansion
+        ctx.shadowColor = "#82fff8";
+        ctx.shadowBlur = 25;
+        const ringR = 30 + strikeEase * 60;
+        ctx.strokeStyle = "rgba(130, 255, 248, 0.85)";
+        ctx.lineWidth = 5 + (1 - strikeEase) * 6;
+        ctx.beginPath();
+        ctx.arc(burstX * 0.6, burstY, ringR, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.shadowBlur = 0;
+
+        // Secondary ring
+        ctx.strokeStyle = `rgba(${this._hexToRgb(this.data.primary)}, 0.5)`;
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.arc(burstX * 0.6, burstY, ringR * 0.7, 0, Math.PI * 2);
+        ctx.stroke();
+
+        // Energy orbs along the strike path
+        ctx.globalAlpha = 0.7;
+        for (let i = 0; i < 6; i++) {
+          const orbT = i / 6;
+          const orbX = dir * (10 + orbT * (burstX - 10));
+          const orbY = burstY + Math.sin(t / 60 + i * 1.3) * 8;
+          const orbR = 3 + Math.sin(t / 40 + i * 2) * 1.5;
+          ctx.fillStyle = i % 2 === 0 ? "rgba(130, 255, 248, 0.9)" : "rgba(200, 255, 252, 0.8)";
+          ctx.beginPath();
+          ctx.arc(orbX, orbY, orbR, 0, Math.PI * 2);
+          ctx.fill();
+        }
+        ctx.globalAlpha = 1;
+
+        // Central flash during peak strike
+        if (strikeEase > 0.3 && strikeEase < 0.8) {
+          const flashIntensity = 1 - Math.abs(strikeEase - 0.55) / 0.25;
+          ctx.globalAlpha = flashIntensity * 0.4;
+          const flashGrad = ctx.createRadialGradient(burstX * 0.6, burstY, 5, burstX * 0.6, burstY, 50);
+          flashGrad.addColorStop(0, "rgba(255, 255, 255, 0.8)");
+          flashGrad.addColorStop(0.5, "rgba(130, 255, 248, 0.3)");
+          flashGrad.addColorStop(1, "rgba(130, 255, 248, 0)");
+          ctx.fillStyle = flashGrad;
+          ctx.beginPath();
+          ctx.arc(burstX * 0.6, burstY, 50, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.globalAlpha = 1;
+        }
+      }
+
+      if (isRecovery) {
+        // Dissipating sparks
+        const fadeT = (progress - 0.72) / 0.28;
+        ctx.globalAlpha = (1 - fadeT) * 0.5;
+        for (let i = 0; i < 6; i++) {
+          const angle = t / 150 + i * Math.PI / 3;
+          const r = 25 + fadeT * 40;
+          const sx = burstX * 0.4 + Math.cos(angle) * r;
+          const sy = burstY + Math.sin(angle) * r * 0.7;
+          ctx.fillStyle = "rgba(130, 255, 248, 0.6)";
+          ctx.beginPath();
+          ctx.arc(sx, sy, 2, 0, Math.PI * 2);
+          ctx.fill();
+        }
+        ctx.globalAlpha = 1;
+      }
     }
 
     ctx.restore();
   }
 
+  _hexToRgb(hex) {
+    if (!hex) return "200, 200, 200";
+    const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+    return result ? `${parseInt(result[1], 16)}, ${parseInt(result[2], 16)}, ${parseInt(result[3], 16)}` : "200, 200, 200";
+  }
+
   drawAttackPose(intent, phase) {
-    const direction = this.facing;
-    const bodyBaseY = -this.height * 0.36;
-    const torsoLean = direction * (phase === "windup" ? -0.05 : this.attackType === "light" ? 0.16 : this.attackType === "heavy" ? 0.24 : 0.2);
-    const armForward = direction * intent.armReach;
-    const armUp = intent.armRise;
-    const shoulderShift = phase === "strike" ? 10 : phase === "windup" ? -4 : 2;
-    const forearmStretch = phase === "strike" ? 1.15 : phase === "windup" ? 0.82 : 0.96;
+    const dir = this.facing;
+    const progress = this.attackDuration > 0 ? 1 - this.attackTimer / this.attackDuration : 0;
+    const isStrike = phase === "strike";
+    const isWindup = phase === "windup";
+    const strikeEase = isStrike ? Math.sin((progress - 0.28) / 0.44 * Math.PI * 0.5) : 0;
+    const t = performance.now();
 
+    // Afterimage / ghost trail during strike
+    if (isStrike) {
+      ctx.save();
+      for (let ghost = 2; ghost >= 1; ghost--) {
+        const offset = ghost * 8 * strikeEase;
+        ctx.globalAlpha = 0.08 + (3 - ghost) * 0.04;
+        ctx.fillStyle = this.attackType === "light" ? "rgba(255, 248, 188, 0.3)"
+          : this.attackType === "heavy" ? "rgba(255, 182, 112, 0.3)"
+          : "rgba(130, 255, 248, 0.3)";
+        ctx.fillRect(-this.width * 0.4 - dir * offset, -this.height + 4, this.width * 0.8, this.height - 4);
+      }
+      ctx.restore();
+    }
+
+    // Attack motion indicator
     ctx.save();
-    ctx.translate(0, bodyBaseY);
-    ctx.rotate(torsoLean);
-    ctx.translate(direction * shoulderShift, phase === "strike" ? -4 : 0);
 
-    ctx.fillStyle = intent.glowColor;
-    ctx.globalAlpha = this.attackType === "light" ? 0.85 : 0.6;
-    ctx.beginPath();
-    ctx.ellipse(direction * 6, -18, 16, 12, 0, 0, Math.PI * 2);
-    ctx.fill();
-
-    ctx.globalAlpha = 1;
-    ctx.strokeStyle = intent.trailColor;
-    ctx.lineCap = "round";
-    ctx.lineWidth = this.attackType === "light" ? 8 : this.attackType === "heavy" ? 10 : 12;
-    ctx.beginPath();
-    ctx.moveTo(direction * 8, -16);
-    ctx.lineTo(direction * (18 + armForward * 0.4 * forearmStretch), armUp - 32);
-    ctx.stroke();
-
-    ctx.fillStyle = this.attackType === "light" ? "rgba(255, 249, 205, 0.95)" : this.attackType === "heavy" ? "rgba(255, 209, 156, 0.95)" : "rgba(190, 255, 250, 0.95)";
-    ctx.beginPath();
-    ctx.arc(direction * (20 + armForward * 0.5 * forearmStretch), armUp - 30, 12 * intent.handScale, 0, Math.PI * 2);
-    ctx.fill();
-
-    if (phase !== "windup") {
-      ctx.globalAlpha = phase === "strike" ? 0.28 : 0.16;
-      ctx.strokeStyle = intent.glowColor;
-      ctx.lineWidth = phase === "strike" ? 10 : 6;
+    if (this.attackType === "light" && isStrike) {
+      // Fast forward thrust line
+      const thrustLen = 30 + strikeEase * 35;
+      ctx.strokeStyle = "rgba(255, 248, 200, 0.7)";
+      ctx.lineWidth = 3;
+      ctx.lineCap = "round";
       ctx.beginPath();
-      ctx.moveTo(direction * -2, -22);
-      ctx.lineTo(direction * (28 + armForward * 0.25), armUp - 14);
+      ctx.moveTo(dir * 15, -this.height * 0.6);
+      ctx.lineTo(dir * (15 + thrustLen), -this.height * 0.58);
       ctx.stroke();
+
+      // Fist/strike point
+      ctx.fillStyle = "rgba(255, 255, 240, 0.9)";
+      ctx.beginPath();
+      ctx.arc(dir * (15 + thrustLen), -this.height * 0.58, 5, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    if (this.attackType === "heavy" && isStrike) {
+      // Heavy downward/forward sweep motion arc
+      const sweepAngle = -1.2 + strikeEase * 2.4;
+      ctx.strokeStyle = "rgba(255, 200, 140, 0.6)";
+      ctx.lineWidth = 5;
+      ctx.lineCap = "round";
+      ctx.beginPath();
+      const sweepR = 35 + strikeEase * 15;
+      const startA = sweepAngle - 0.8;
+      const endA = sweepAngle + 0.3;
+      ctx.arc(dir * 25, -this.height * 0.5, sweepR, startA, endA);
+      ctx.stroke();
+    }
+
+    if (this.attackType === "special" && isStrike) {
+      // Energy push — expanding rings from hands
+      const ringR1 = 14 + strikeEase * 20;
+      const ringR2 = 10 + strikeEase * 32;
+      ctx.strokeStyle = "rgba(130, 255, 248, 0.5)";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(dir * (30 + strikeEase * 30), -this.height * 0.55, ringR1, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.globalAlpha = 0.3;
+      ctx.beginPath();
+      ctx.arc(dir * (25 + strikeEase * 25), -this.height * 0.55, ringR2, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.globalAlpha = 1;
+    }
+
+    // Windup anticipation — subtle pull-back glow
+    if (isWindup) {
+      const windupT = progress / 0.28;
+      ctx.globalAlpha = windupT * 0.25;
+      const gColor = this.attackType === "light" ? "rgba(255, 248, 188, 0.5)"
+        : this.attackType === "heavy" ? "rgba(255, 179, 118, 0.5)"
+        : "rgba(130, 255, 248, 0.5)";
+      ctx.fillStyle = gColor;
+      ctx.beginPath();
+      ctx.arc(-dir * 8, -this.height * 0.55, 18 + windupT * 6, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.globalAlpha = 1;
     }
 
     ctx.restore();
@@ -1622,9 +1913,9 @@ function drawListSelector(items, index, startY) {
 }
 
 function drawCharacterCards() {
-  const cardW = 320;
-  const cardH = 300;
-  const gap = 46;
+  const cardW = 210;
+  const cardH = 280;
+  const gap = 18;
   const total = fightersData.length * cardW + (fightersData.length - 1) * gap;
   const startX = W * 0.5 - total * 0.5;
 
@@ -1639,24 +1930,23 @@ function drawCharacterCards() {
     grad.addColorStop(0, f.primary);
     grad.addColorStop(1, f.secondary);
     ctx.fillStyle = grad;
-    ctx.fillRect(x + 18, y + 18, cardW - 36, 132);
+    ctx.fillRect(x + 12, y + 12, cardW - 24, 110);
 
     const sprite = getSprite(f.spritePath);
     if (sprite && sprite.loaded) {
       ctx.imageSmoothingEnabled = false;
-      ctx.drawImage(sprite.img, x + cardW * 0.5 - 58, y + 26, 116, 116);
+      ctx.drawImage(sprite.img, x + cardW * 0.5 - 48, y + 18, 96, 96);
       ctx.imageSmoothingEnabled = true;
     }
 
     ctx.fillStyle = "#f6efe0";
-    ctx.font = "bold 22px Trebuchet MS";
-    ctx.fillText(f.name, x + 18, y + 174);
+    ctx.font = "bold 18px Trebuchet MS";
+    ctx.fillText(f.name, x + 12, y + 148);
 
-    ctx.font = "17px Trebuchet MS";
+    ctx.font = "14px Trebuchet MS";
     ctx.fillStyle = "#c3d0dc";
-    ctx.fillText(`Speed: ${f.speed.toFixed(2)}`, x + 18, y + 212);
-    ctx.fillText(`Power: ${f.power.toFixed(2)}`, x + 18, y + 236);
-    ctx.fillText(`Defense: ${f.defense.toFixed(2)}`, x + 18, y + 260);
+    ctx.fillText(`SPD ${f.speed.toFixed(2)}  PWR ${f.power.toFixed(2)}`, x + 12, y + 174);
+    ctx.fillText(`DEF ${f.defense.toFixed(2)}`, x + 12, y + 194);
 
     if (i === state.p1Choice) {
       ctx.strokeStyle = "#efb278";
@@ -1781,7 +2071,7 @@ function handleSceneInput() {
 
   if (state.scene === "arcade-next" && wasPressed("Enter", "Pad0Confirm", "Pad1Confirm")) {
     playSfx("ui-confirm");
-    startMatch(true);
+    startMatch(false);
   }
 
   if (state.scene === "match" && state.mode === "training" && wasPressed("Enter", "Pad0Confirm", "Pad1Confirm")) {
