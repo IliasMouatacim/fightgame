@@ -63,7 +63,9 @@ function syncGamepadInput() {
     const up = Boolean(pad) && (isButtonPressed(pad.buttons[12]) || axisY < -GAMEPAD_DEADZONE);
     const down = Boolean(pad) && (isButtonPressed(pad.buttons[13]) || axisY > GAMEPAD_DEADZONE);
 
-    const confirm = Boolean(pad) && (isButtonPressed(pad.buttons[0]) || isButtonPressed(pad.buttons[9]));
+    const jump = Boolean(pad) && isButtonPressed(pad.buttons[0]);
+    const confirm = Boolean(pad) && (isButtonPressed(pad.buttons[9]) || isButtonPressed(pad.buttons[0]));
+    const confirmMenuOnly = Boolean(pad) && isButtonPressed(pad.buttons[9]);
     const back = Boolean(pad) && isButtonPressed(pad.buttons[1]);
     const light = Boolean(pad) && isButtonPressed(pad.buttons[2]);
     const heavy = Boolean(pad) && isButtonPressed(pad.buttons[3]);
@@ -72,11 +74,11 @@ function syncGamepadInput() {
 
     setVirtualInput(`${prefix}Left`, left);
     setVirtualInput(`${prefix}Right`, right);
-    setVirtualInput(`${prefix}Up`, up || confirm);
+    setVirtualInput(`${prefix}Up`, up);
     setVirtualInput(`${prefix}Down`, down);
-    setVirtualInput(`${prefix}Confirm`, confirm);
+    setVirtualInput(`${prefix}Confirm`, state.scene === "match" ? confirmMenuOnly : confirm);
     setVirtualInput(`${prefix}Back`, back);
-    setVirtualInput(`${prefix}Jump`, confirm);
+    setVirtualInput(`${prefix}Jump`, jump || up);
     setVirtualInput(`${prefix}Block`, block);
     setVirtualInput(`${prefix}Light`, light);
     setVirtualInput(`${prefix}Heavy`, heavy);
@@ -635,14 +637,8 @@ class Fighter {
 
     const c = this.slot === 1 && mode === "arcade" ? cpuBrain(this, enemy) : this.controlsPressed();
 
-    // Face walking direction when moving, otherwise face enemy
-    if (this.attackType) {
-      this.facing = this.x < enemy.x ? 1 : -1;
-    } else if (Math.abs(this.vx) > 1.5) {
-      this.facing = this.vx > 0 ? 1 : -1;
-    } else {
-      this.facing = this.x < enemy.x ? 1 : -1;
-    }
+    // Always face the enemy (standard fighting game behavior)
+    this.facing = this.x < enemy.x ? 1 : -1;
 
     this.blocking = c.block && this.hitstun <= 0 && this.grounded;
     const wasGrounded = this.grounded;
