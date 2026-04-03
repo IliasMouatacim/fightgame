@@ -9,8 +9,25 @@
   <body>
     <div class="app-shell">
       <header class="top-bar">
-        <h1>Clashline Arena</h1>
-        <p>Fast 1v1 prototype with rounds, AI, training, specials, and style-heavy stages</p>
+        <div class="top-bar__eyebrow">Prototype build</div>
+        <div class="top-bar__head">
+          <h1>Clashline Arena</h1>
+          <p>Fast 1v1 prototype with rounds, AI, training, specials, and style-heavy stages</p>
+        </div>
+        <div class="header-meta" aria-label="Game summary">
+          <div>
+            <span>Mode</span>
+            <strong>Versus / Training</strong>
+          </div>
+          <div>
+            <span>Match</span>
+            <strong>Best of 3</strong>
+          </div>
+          <div>
+            <span>Audio</span>
+            <strong>Mute toggle</strong>
+          </div>
+        </div>
       </header>
 
       <main class="game-wrap">
@@ -19,20 +36,20 @@
       </main>
 
       <footer class="controls-panel">
-        <div>
+        <div class="control-card">
           <h2>Player 1</h2>
-          <p>Move: A D | Jump: W | Block: S</p>
-          <p>Light: F | Heavy: G | Special: H</p>
+          <p><span class="keycap">A</span><span class="keycap">D</span> Move <span class="keycap">W</span> Jump <span class="keycap">S</span> Block</p>
+          <p><span class="keycap">F</span> Light <span class="keycap">G</span> Heavy <span class="keycap">H</span> Special</p>
         </div>
-        <div>
+        <div class="control-card">
           <h2>Player 2</h2>
-          <p>Move: Left Right | Jump: Up | Block: Down</p>
-          <p>Light: J | Heavy: K | Special: L</p>
+          <p><span class="keycap">←</span><span class="keycap">→</span> Move <span class="keycap">↑</span> Jump <span class="keycap">↓</span> Block</p>
+          <p><span class="keycap">J</span> Light <span class="keycap">K</span> Heavy <span class="keycap">L</span> Special</p>
         </div>
-        <div>
+        <div class="control-card">
           <h2>Global</h2>
-          <p>Enter: Confirm | Esc: Back to menu</p>
-          <p>M: Toggle mute</p>
+          <p><span class="keycap">Enter</span> Confirm <span class="keycap">Esc</span> Back to menu</p>
+          <p><span class="keycap">M</span> Toggle mute</p>
         </div>
       </footer>
     </div>
