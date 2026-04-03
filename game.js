@@ -21,8 +21,9 @@ function isHeld(control) {
   return asArray(control).some((code) => input.has(code));
 }
 
-function wasPressed(control) {
-  return asArray(control).some((code) => keysPressedThisFrame.has(code));
+function wasPressed(...controls) {
+  const list = controls.length === 1 ? asArray(controls[0]) : controls;
+  return list.some((code) => keysPressedThisFrame.has(code));
 }
 
 function setVirtualInput(code, pressed) {
@@ -98,6 +99,8 @@ const fightersData = [
     jumpVelocity: 18.5,
     dashSpeed: 8.5,
     spritePath: "assets/fighter1.png",
+    punchSpritePath: "assets/hoodie_punch.png",
+    kickSpritePath: "assets/hoodie_kick.png",
   },
   {
     id: "cloud-bloom",
@@ -161,9 +164,14 @@ function getSprite(path) {
 
   const img = new Image();
   img.src = path;
-  const record = { img, loaded: false };
+  const record = { img, loaded: false, failed: false };
   img.onload = () => {
     record.loaded = true;
+    record.failed = false;
+  };
+  img.onerror = () => {
+    record.loaded = false;
+    record.failed = true;
   };
   spriteCache.set(path, record);
   return record;
@@ -799,7 +807,11 @@ class Fighter {
 
   draw() {
     const pulse = this.attackType ? Math.sin(performance.now() / 65) * 0.08 + 1 : 1;
-    const sprite = getSprite(this.data.spritePath);
+    const activeSpritePath = this.getDisplaySpritePath();
+    let sprite = getSprite(activeSpritePath);
+    if (sprite && sprite.failed && activeSpritePath !== this.data.spritePath) {
+      sprite = getSprite(this.data.spritePath);
+    }
     const attackProgress = this.attackType && this.attackDuration > 0 ? 1 - this.attackTimer / this.attackDuration : 0;
     const attackPhase = this.getAttackPhase(attackProgress);
     const attackIntent = this.getAttackIntent(attackProgress, attackPhase);
@@ -897,6 +909,15 @@ class Fighter {
     ctx.beginPath();
     ctx.ellipse(this.x, this.y + 4, 45, 12, 0, 0, Math.PI * 2);
     ctx.fill();
+  }
+
+  getDisplaySpritePath() {
+    if (this.data.id !== "hoodie-ace") return this.data.spritePath;
+    if (this.attackType === "light") return this.data.punchSpritePath || this.data.spritePath;
+    if (this.attackType === "heavy" || this.attackType === "special") {
+      return this.data.kickSpritePath || this.data.spritePath;
+    }
+    return this.data.spritePath;
   }
 
   getAttackPhase(progress) {
