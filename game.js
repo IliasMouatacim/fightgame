@@ -315,7 +315,7 @@ function emitTone({ freq, when = 0, duration = 0.12, type = "square", gain = 0.1
   osc.stop(at + duration + 0.02);
 }
 
-function emitNoise({ when = 0, duration = 0.08, gain = 0.04, target = "sfx" }) {
+function emitNoise({ when = 0, duration = 0.08, gain = 0.04, target = "sfx", filterType = "highpass", filterFreq = 1200, filterQ = 0.8 }) {
   const ctx = ensureAudio();
   if (!ctx) return;
 
@@ -333,8 +333,9 @@ function emitNoise({ when = 0, duration = 0.08, gain = 0.04, target = "sfx" }) {
   const amp = ctx.createGain();
   const bus = target === "music" ? audioState.musicBus : audioState.sfxBus;
 
-  hp.type = "highpass";
-  hp.frequency.value = 1200;
+  hp.type = filterType;
+  hp.frequency.value = filterFreq;
+  hp.Q.value = filterQ;
 
   amp.gain.setValueAtTime(0.0001, at);
   amp.gain.exponentialRampToValueAtTime(gain, at + 0.008);
@@ -347,6 +348,30 @@ function emitNoise({ when = 0, duration = 0.08, gain = 0.04, target = "sfx" }) {
 
   src.start(at);
   src.stop(at + duration + 0.02);
+}
+
+function playAttackSfx(type) {
+  if (state.musicMuted) return;
+
+  if (type === "light") {
+    emitTone({ freq: 760, duration: 0.03, type: "triangle", gain: 0.03, slideTo: 980 });
+    emitTone({ freq: 1320, when: 0.012, duration: 0.04, type: "sine", gain: 0.016, slideTo: 1520 });
+    emitNoise({ duration: 0.018, gain: 0.012, filterFreq: 4200, filterQ: 0.5 });
+    return;
+  }
+
+  if (type === "heavy") {
+    emitTone({ freq: 165, duration: 0.08, type: "sine", gain: 0.06, slideTo: 96 });
+    emitTone({ freq: 420, when: 0.014, duration: 0.05, type: "triangle", gain: 0.024, slideTo: 240 });
+    emitNoise({ duration: 0.055, gain: 0.022, filterType: "bandpass", filterFreq: 1700, filterQ: 0.95 });
+    return;
+  }
+
+  if (type === "special") {
+    emitTone({ freq: 260, duration: 0.06, type: "sawtooth", gain: 0.035, slideTo: 520 });
+    emitTone({ freq: 780, when: 0.035, duration: 0.11, type: "sawtooth", gain: 0.045, slideTo: 1240 });
+    emitNoise({ when: 0.015, duration: 0.08, gain: 0.03, filterType: "bandpass", filterFreq: 2500, filterQ: 1.1 });
+  }
 }
 
 function playSfx(eventName) {
@@ -369,37 +394,47 @@ function playSfx(eventName) {
     return;
   }
 
-  if (eventName === "light") {
-    emitTone({ freq: 310, duration: 0.06, type: "square", gain: 0.05, slideTo: 230 });
-    return;
-  }
-
-  if (eventName === "heavy") {
-    emitTone({ freq: 210, duration: 0.11, type: "square", gain: 0.07, slideTo: 110 });
-    emitNoise({ duration: 0.06, gain: 0.03 });
-    return;
-  }
-
-  if (eventName === "special") {
-    emitTone({ freq: 440, duration: 0.08, type: "sawtooth", gain: 0.06 });
-    emitTone({ freq: 660, when: 0.05, duration: 0.12, type: "sawtooth", gain: 0.07, slideTo: 980 });
-    return;
-  }
-
   if (eventName === "hit") {
-    emitTone({ freq: 190, duration: 0.07, type: "square", gain: 0.05, slideTo: 120 });
-    emitNoise({ duration: 0.05, gain: 0.022 });
+    const attackType = arguments[1] && arguments[1].attackType ? arguments[1].attackType : "light";
+    const blocked = Boolean(arguments[1] && arguments[1].blocked);
+
+    if (blocked) {
+      emitTone({ freq: 760, duration: 0.035, type: "triangle", gain: 0.028, slideTo: 520 });
+      emitTone({ freq: 1040, when: 0.012, duration: 0.04, type: "triangle", gain: 0.02, slideTo: 760 });
+      emitNoise({ duration: 0.032, gain: 0.015, filterType: "bandpass", filterFreq: 2200, filterQ: 1.2 });
+      return;
+    }
+
+    if (attackType === "light") {
+      emitTone({ freq: 230, duration: 0.05, type: "square", gain: 0.035, slideTo: 150 });
+      emitTone({ freq: 1200, when: 0.006, duration: 0.03, type: "triangle", gain: 0.018, slideTo: 980 });
+      emitNoise({ duration: 0.034, gain: 0.018, filterType: "bandpass", filterFreq: 2700, filterQ: 1.15 });
+      return;
+    }
+
+    if (attackType === "heavy") {
+      emitTone({ freq: 150, duration: 0.085, type: "sine", gain: 0.06, slideTo: 88 });
+      emitTone({ freq: 560, when: 0.012, duration: 0.05, type: "triangle", gain: 0.024, slideTo: 320 });
+      emitNoise({ duration: 0.06, gain: 0.03, filterType: "bandpass", filterFreq: 1500, filterQ: 0.85 });
+      return;
+    }
+
+    emitTone({ freq: 180, duration: 0.09, type: "square", gain: 0.05, slideTo: 98 });
+    emitTone({ freq: 720, when: 0.012, duration: 0.06, type: "triangle", gain: 0.022, slideTo: 540 });
+    emitNoise({ duration: 0.05, gain: 0.022, filterType: "bandpass", filterFreq: 2100, filterQ: 1.05 });
     return;
   }
 
   if (eventName === "block") {
-    emitTone({ freq: 840, duration: 0.05, type: "triangle", gain: 0.035, slideTo: 560 });
+    emitTone({ freq: 920, duration: 0.03, type: "triangle", gain: 0.028, slideTo: 680 });
+    emitNoise({ duration: 0.024, gain: 0.012, filterType: "bandpass", filterFreq: 2500, filterQ: 1.3 });
     return;
   }
 
   if (eventName === "ko") {
-    emitTone({ freq: 165, duration: 0.14, type: "square", gain: 0.08, slideTo: 80 });
-    emitNoise({ when: 0.02, duration: 0.1, gain: 0.03 });
+    emitTone({ freq: 140, duration: 0.12, type: "sine", gain: 0.085, slideTo: 62 });
+    emitTone({ freq: 70, when: 0.06, duration: 0.18, type: "triangle", gain: 0.045, slideTo: 45 });
+    emitNoise({ when: 0.02, duration: 0.09, gain: 0.022, filterType: "bandpass", filterFreq: 900, filterQ: 0.8 });
     return;
   }
 
@@ -676,7 +711,7 @@ class Fighter {
 
     this.attackDuration = this.attackTimer;
 
-    playSfx(type);
+    playAttackSfx(type);
   }
 
   attackBox() {
@@ -735,17 +770,17 @@ class Fighter {
     if (enemy.blocking) {
       damage = box.chip;
       enemy.hitstun = Math.max(enemy.hitstun, 6);
-      spawnBurst(enemy.x, enemy.y - enemy.height * 0.6, "#8ec7df", 8);
-      playSfx("block");
+      spawnBurst(enemy.x, enemy.y - enemy.height * 0.6, "#8ec7df", this.attackType === "light" ? 6 : 9);
+      playSfx("hit", { attackType: this.attackType, blocked: true });
     } else {
       enemy.hitstun = Math.max(enemy.hitstun, box.hitstun);
       enemy.combo += 1;
       enemy.comboTimeout = 80;
       state.comboTexts[this.slot] = `${this.data.name} ${enemy.combo} HIT`;
       state.comboTextTimer = 44;
-      spawnBurst(enemy.x, enemy.y - enemy.height * 0.6, "#ffd7b5", 18);
-      state.cameraShake = Math.max(state.cameraShake, 6);
-      playSfx("hit");
+      spawnBurst(enemy.x, enemy.y - enemy.height * 0.6, this.attackType === "light" ? "#fff1a8" : this.attackType === "heavy" ? "#ffbb7e" : "#9ffbf2", this.attackType === "light" ? 12 : this.attackType === "heavy" ? 18 : 24);
+      state.cameraShake = Math.max(state.cameraShake, this.attackType === "light" ? 5 : this.attackType === "heavy" ? 8 : 10);
+      playSfx("hit", { attackType: this.attackType, blocked: false });
     }
 
     enemy.hp -= Math.max(1, damage);
@@ -766,7 +801,8 @@ class Fighter {
     const pulse = this.attackType ? Math.sin(performance.now() / 65) * 0.08 + 1 : 1;
     const sprite = getSprite(this.data.spritePath);
     const attackProgress = this.attackType && this.attackDuration > 0 ? 1 - this.attackTimer / this.attackDuration : 0;
-    const attackIntent = this.getAttackIntent(attackProgress);
+    const attackPhase = this.getAttackPhase(attackProgress);
+    const attackIntent = this.getAttackIntent(attackProgress, attackPhase);
 
     ctx.save();
     ctx.translate(this.x, this.y);
@@ -800,6 +836,18 @@ class Fighter {
 
     ctx.scale(this.facing * this.scaleX, this.scaleY);
 
+    if (sprite && sprite.loaded && this.attackType && attackPhase !== "windup") {
+      ctx.globalAlpha = attackPhase === "strike" ? 0.3 : 0.16;
+      ctx.drawImage(
+        sprite.img,
+        -this.width * 0.55 * pulse - this.facing * 10,
+        -this.height + 2,
+        this.width * 1.1 * pulse,
+        this.height
+      );
+      ctx.globalAlpha = 1;
+    }
+
     if (sprite && sprite.loaded) {
       ctx.imageSmoothingEnabled = false;
       ctx.drawImage(
@@ -827,7 +875,7 @@ class Fighter {
     }
 
     if (this.attackType) {
-      this.drawAttackPose(attackIntent);
+      this.drawAttackPose(attackIntent, attackPhase);
     }
 
     if (this.blocking) {
@@ -851,58 +899,67 @@ class Fighter {
     ctx.fill();
   }
 
-  getAttackIntent(progress) {
+  getAttackPhase(progress) {
+    if (progress < 0.28) return "windup";
+    if (progress < 0.72) return "strike";
+    return "recovery";
+  }
+
+  getAttackIntent(progress, phase) {
     const clamped = Math.max(0, Math.min(1, progress));
+    const inWindup = phase === "windup";
+    const inStrike = phase === "strike";
+    const inRecovery = phase === "recovery";
 
     if (this.attackType === "light") {
       return {
-        bodyLean: -0.1 + clamped * 0.18,
-        bodyShiftX: 4 + clamped * 10,
-        bodyShiftY: -2,
-        armReach: 24 + clamped * 22,
-        armRise: -22,
-        slashRadius: 74 + clamped * 18,
-        slashWidth: 8,
+        bodyLean: inWindup ? -0.18 : inStrike ? 0.2 + clamped * 0.14 : 0.08,
+        bodyShiftX: inWindup ? -4 : inStrike ? 10 + clamped * 10 : 4,
+        bodyShiftY: inWindup ? -1 : inStrike ? -2 : 0,
+        armReach: inWindup ? 16 : inStrike ? 30 + clamped * 28 : 20,
+        armRise: inWindup ? -12 : inStrike ? -24 : -10,
+        slashRadius: inStrike ? 78 + clamped * 28 : 58,
+        slashWidth: 7,
         glowColor: "rgba(255, 248, 188, 0.95)",
-        glowOuter: "rgba(255, 219, 107, 0.22)",
-        trailColor: "rgba(255, 246, 176, 0.85)",
-        burstColor: "rgba(255, 236, 160, 0.9)",
-        sparkCount: 6,
+        glowOuter: inStrike ? "rgba(255, 230, 142, 0.26)" : "rgba(255, 219, 107, 0.14)",
+        trailColor: inStrike ? "rgba(255, 248, 182, 0.92)" : "rgba(255, 246, 176, 0.4)",
+        burstColor: "rgba(255, 246, 182, 0.9)",
+        sparkCount: inStrike ? 8 : 4,
         handScale: 1,
       };
     }
 
     if (this.attackType === "heavy") {
       return {
-        bodyLean: 0.14 + clamped * 0.12,
-        bodyShiftX: 2 + clamped * 6,
-        bodyShiftY: 2,
-        armReach: 38 + clamped * 36,
-        armRise: -12,
-        slashRadius: 96 + clamped * 30,
-        slashWidth: 14,
+        bodyLean: inWindup ? 0.3 : inStrike ? 0.1 + clamped * 0.16 : 0.04,
+        bodyShiftX: inWindup ? -6 : inStrike ? 8 + clamped * 8 : 2,
+        bodyShiftY: inWindup ? 2 : inStrike ? 1 : 0,
+        armReach: inWindup ? 24 : inStrike ? 42 + clamped * 40 : 30,
+        armRise: inWindup ? -10 : inStrike ? -14 : -4,
+        slashRadius: inStrike ? 100 + clamped * 38 : 72,
+        slashWidth: 12,
         glowColor: "rgba(255, 179, 118, 0.95)",
-        glowOuter: "rgba(255, 112, 58, 0.18)",
-        trailColor: "rgba(255, 180, 108, 0.78)",
-        burstColor: "rgba(255, 160, 96, 0.85)",
-        sparkCount: 10,
+        glowOuter: inStrike ? "rgba(255, 128, 64, 0.22)" : "rgba(255, 112, 58, 0.12)",
+        trailColor: inStrike ? "rgba(255, 182, 112, 0.84)" : "rgba(255, 180, 108, 0.45)",
+        burstColor: "rgba(255, 170, 102, 0.86)",
+        sparkCount: inStrike ? 12 : 6,
         handScale: 1.12,
       };
     }
 
     return {
-      bodyLean: 0.02 + clamped * 0.18,
-      bodyShiftX: 3 + clamped * 8,
-      bodyShiftY: -2,
-      armReach: 46 + clamped * 42,
-      armRise: -18,
-      slashRadius: 112 + clamped * 40,
-      slashWidth: 18,
+      bodyLean: inWindup ? 0.12 : inStrike ? 0.26 + clamped * 0.16 : 0.08,
+      bodyShiftX: inWindup ? -5 : inStrike ? 10 + clamped * 10 : 4,
+      bodyShiftY: inWindup ? -1 : inStrike ? -2 : 0,
+      armReach: inWindup ? 24 : inStrike ? 54 + clamped * 42 : 34,
+      armRise: inWindup ? -16 : inStrike ? -18 : -8,
+      slashRadius: inStrike ? 122 + clamped * 44 : 88,
+      slashWidth: 16,
       glowColor: "rgba(130, 255, 248, 0.9)",
-      glowOuter: "rgba(74, 215, 209, 0.18)",
-      trailColor: "rgba(120, 255, 244, 0.82)",
-      burstColor: "rgba(120, 255, 244, 0.85)",
-      sparkCount: 12,
+      glowOuter: inStrike ? "rgba(74, 215, 209, 0.24)" : "rgba(74, 215, 209, 0.12)",
+      trailColor: inStrike ? "rgba(120, 255, 244, 0.9)" : "rgba(120, 255, 244, 0.48)",
+      burstColor: "rgba(120, 255, 244, 0.88)",
+      sparkCount: inStrike ? 14 : 8,
       handScale: 1.16,
     };
   }
@@ -938,6 +995,14 @@ class Fighter {
     ctx.arc(armX * 0.34, -this.height * 0.58, intent.slashRadius, slashStart, slashEnd);
     ctx.stroke();
 
+    ctx.globalAlpha = this.attackType === "light" ? 0.34 : 0.24;
+    ctx.strokeStyle = "rgba(255,255,255,0.9)";
+    ctx.lineWidth = this.attackType === "light" ? 2 : 3;
+    ctx.beginPath();
+    ctx.moveTo(direction * 8, -this.height * 0.58);
+    ctx.lineTo(armX * 0.45, armY);
+    ctx.stroke();
+
     if (this.attackType === "light") {
       ctx.globalAlpha = 0.95;
       ctx.fillStyle = intent.glowColor;
@@ -956,6 +1021,17 @@ class Fighter {
       ctx.stroke();
     }
 
+    if (this.attackType === "heavy") {
+      ctx.globalAlpha = 0.22;
+      ctx.fillStyle = "rgba(255, 190, 130, 0.35)";
+      ctx.beginPath();
+      ctx.moveTo(direction * 12, -this.height * 0.72);
+      ctx.lineTo(direction * 58, -this.height * 0.5);
+      ctx.lineTo(direction * 44, -this.height * 0.34);
+      ctx.closePath();
+      ctx.fill();
+    }
+
     ctx.globalAlpha = 0.5;
     ctx.fillStyle = intent.burstColor;
     for (let i = 0; i < intent.sparkCount; i += 1) {
@@ -971,16 +1047,19 @@ class Fighter {
     ctx.restore();
   }
 
-  drawAttackPose(intent) {
+  drawAttackPose(intent, phase) {
     const direction = this.facing;
     const bodyBaseY = -this.height * 0.36;
-    const torsoLean = direction * (this.attackType === "light" ? 0.12 : this.attackType === "heavy" ? 0.22 : 0.18);
+    const torsoLean = direction * (phase === "windup" ? -0.05 : this.attackType === "light" ? 0.16 : this.attackType === "heavy" ? 0.24 : 0.2);
     const armForward = direction * intent.armReach;
     const armUp = intent.armRise;
+    const shoulderShift = phase === "strike" ? 10 : phase === "windup" ? -4 : 2;
+    const forearmStretch = phase === "strike" ? 1.15 : phase === "windup" ? 0.82 : 0.96;
 
     ctx.save();
     ctx.translate(0, bodyBaseY);
     ctx.rotate(torsoLean);
+    ctx.translate(direction * shoulderShift, phase === "strike" ? -4 : 0);
 
     ctx.fillStyle = intent.glowColor;
     ctx.globalAlpha = this.attackType === "light" ? 0.85 : 0.6;
@@ -994,13 +1073,23 @@ class Fighter {
     ctx.lineWidth = this.attackType === "light" ? 8 : this.attackType === "heavy" ? 10 : 12;
     ctx.beginPath();
     ctx.moveTo(direction * 8, -16);
-    ctx.lineTo(direction * (18 + armForward * 0.4), armUp - 32);
+    ctx.lineTo(direction * (18 + armForward * 0.4 * forearmStretch), armUp - 32);
     ctx.stroke();
 
     ctx.fillStyle = this.attackType === "light" ? "rgba(255, 249, 205, 0.95)" : this.attackType === "heavy" ? "rgba(255, 209, 156, 0.95)" : "rgba(190, 255, 250, 0.95)";
     ctx.beginPath();
-    ctx.arc(direction * (20 + armForward * 0.5), armUp - 30, 12 * intent.handScale, 0, Math.PI * 2);
+    ctx.arc(direction * (20 + armForward * 0.5 * forearmStretch), armUp - 30, 12 * intent.handScale, 0, Math.PI * 2);
     ctx.fill();
+
+    if (phase !== "windup") {
+      ctx.globalAlpha = phase === "strike" ? 0.28 : 0.16;
+      ctx.strokeStyle = intent.glowColor;
+      ctx.lineWidth = phase === "strike" ? 10 : 6;
+      ctx.beginPath();
+      ctx.moveTo(direction * -2, -22);
+      ctx.lineTo(direction * (28 + armForward * 0.25), armUp - 14);
+      ctx.stroke();
+    }
 
     ctx.restore();
   }
